@@ -154,8 +154,8 @@ app.get('/api/settings', async (req, res) => {
 
 app.post('/api/settings', async (req, res) => {
   try {
-    const { otLimit, otWarn } = req.body;
-    await db.saveSettings(otLimit, otWarn);
+    const { otLimit, otWarn, weeklyLimit } = req.body;
+    await db.saveSettings(otLimit, otWarn, weeklyLimit);
     const settings = await db.getSettings();
     res.json({ success: true, settings });
   } catch(e) {

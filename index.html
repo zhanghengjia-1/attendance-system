@@ -296,13 +296,15 @@ tr:hover { background: #f8f9fb; }
 
     <!-- ===== 安全水位线 (admin) ===== -->
     <div class="page" id="page-waterline">
-      <div class="alert-banner warn" id="waterlineBanner">⚙️ 当前设置：超标上限 36h/月，预警线 30h/月</div>
+      <div class="alert-banner warn" id="waterlineBanner">⚙️ 当前设置：超标上限 36h/月，预警线 30h/月，周工时上限 61h/周</div>
       <div class="filter-bar" style="background:#f8f9fb;border-radius:8px;padding:10px 14px;margin-bottom:16px;">
         <span style="font-weight:500;font-size:13px;">⚙️ 水位线设置：</span>
         <span style="font-size:12px;">超标上限</span><input type="number" id="wlLimitInput" value="36" min="1" max="500" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
         <span style="font-size:12px;">h/月</span>
         <span style="font-size:12px;">预警线</span><input type="number" id="wlWarnInput" value="30" min="1" max="500" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
         <span style="font-size:12px;">h/月</span>
+        <span style="margin-left:16px;font-size:12px;">周工时上限</span><input type="number" id="wlWeeklyInput" value="61" min="1" max="168" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
+        <span style="font-size:12px;">h/周（超限标记调休）</span>
         <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
       </div>
       <div class="stats-row" id="waterlineStats"></div>
@@ -624,6 +626,7 @@ async function loadData() {
     OT_LIMIT = parseFloat(serverData.settings.otLimit) || 36;
     OT_WARN = parseFloat(serverData.settings.otWarn) || 30;
   }
+  WEEKLY_LIMIT = parseFloat(serverData.settings.weeklyLimit) || 61;
   sectionAssignments = serverData.sectionAssignments || {};
   
   document.getElementById('teamCount').textContent = Object.keys(appData.employees).length;
@@ -830,18 +833,19 @@ function renderOTList() {
 function updateWaterlineSettings() {
   OT_LIMIT=parseFloat(document.getElementById('wlLimitInput').value)||36;
   OT_WARN=parseFloat(document.getElementById('wlWarnInput').value)||30;
+  WEEKLY_LIMIT=parseFloat(document.getElementById('wlWeeklyInput').value)||61;
   if(OT_WARN>OT_LIMIT) OT_WARN=OT_LIMIT;
-  API.post('/api/settings', {otLimit: OT_LIMIT, otWarn: OT_WARN}).catch(function(e){ console.warn(e); });
-  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN;
-  document.getElementById('waterlineBanner').innerHTML=`⚙️ 当前设置：超标上限 <strong>${OT_LIMIT}h/月</strong>，预警线 <strong>${OT_WARN}h/月</strong>`;
+  API.post('/api/settings', {otLimit: OT_LIMIT, otWarn: OT_WARN, weeklyLimit: WEEKLY_LIMIT}).catch(function(e){ console.warn(e); });
+  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT;
+  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>';
   document.getElementById('wlSettingsStatus').textContent='✅ 已更新';
   setTimeout(()=>{document.getElementById('wlSettingsStatus').textContent='';},2000);
   renderWaterline();
 }
 function renderWaterline() {
   const month=document.getElementById('wlMonth').value, data=getMonthData(month);
-  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN;
-  document.getElementById('waterlineBanner').innerHTML=`⚙️ 当前设置：超标上限 <strong>${OT_LIMIT}h/月</strong>，预警线 <strong>${OT_WARN}h/月</strong>`;
+  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT;
+  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>';
   const tt=data.reduce((s,r)=>s+getEffectiveTotal(r,month),0);
   const ex=data.filter(r=>getEffectiveTotal(r,month)>OT_LIMIT).length;
   const wn=data.filter(r=>{const th=getEffectiveTotal(r,month);return th>OT_WARN&&th<=OT_LIMIT;}).length;
