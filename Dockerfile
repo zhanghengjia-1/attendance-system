@@ -1,4 +1,4 @@
-FROM registry.gz.cvte.cn/ccloud/jenkins-jnlp-node:18.16.1
+FROM node:18-alpine
 WORKDIR /app
 COPY package*.json ./
 RUN npm install --omit=dev --no-audit --no-fund --ignore-scripts
@@ -6,4 +6,4 @@ COPY . .
 ENV NODE_ENV=production
 ENV PORT=3000
 EXPOSE 3000
-CMD ["sh","-c","node server.js"]
+CMD ["node", "server.js"]
