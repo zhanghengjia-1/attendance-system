@@ -271,7 +271,7 @@ tr:hover { background: #f8f9fb; }
       <div class="filter-bar">
         <span style="font-weight:500;">🗓️ 排班月份：</span>
         <select id="scheduleMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;" onchange="renderSchedule()"></select>
-        <span style="margin-left:16px;font-size:12px;color:var(--text-secondary);">⏱️ 规则：每周工时≤61h，超限下周自动排休1天</span>
+        <span style="margin-left:16px;font-size:12px;color:var(--text-secondary);" id="scheduleRuleHint">⏱️ 规则：每周工时≤61h，超限下周自动排休1天</span>
       </div>
       <div id="scheduleContent"></div>
     </div>
@@ -1323,6 +1323,8 @@ function initScheduleMonth() {
   var dm = findDefaultMonth();
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
+  var hint = document.getElementById('scheduleRuleHint');
+  if (hint) hint.innerHTML = '⏱️ 规则：每周工时≤'+WEEKLY_LIMIT+'h，超限下周自动排休1天';
   renderSchedule();
 }
 
