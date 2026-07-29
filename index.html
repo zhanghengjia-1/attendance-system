@@ -1,0 +1,1471 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>设备组考勤管理系统 - SYRC</title>
+<script>window.CHART_LOAD_FAIL=!1;</script>
+<script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.CHART_LOAD_FAIL=!0;console.warn('Chart.js CDN failed, retrying with backup...');var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';s.onerror=function(){window.CHART_LOAD_FAIL=!0;console.error('Chart.js all CDNs failed')};document.head.appendChild(s);"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+:root {
+  --bg: #f5f6fa; --card-bg: #fff; --primary: #1a73e8; --danger: #e74c3c;
+  --warning: #f39c12; --success: #27ae60; --text: #2c3e50;
+  --text-secondary: #7f8c8d; --border: #e8ecf1; --shadow: 0 2px 12px rgba(0,0,0,0.06);
+  --radius: 12px; --header-h: 60px; --sidebar-w: 220px;
+}
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  background: var(--bg); color: var(--text); min-height: 100vh;
+}
+/* Login */
+.login-overlay {
+  position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.5);
+  z-index: 9999; display: flex; align-items: center; justify-content: center;
+}
+.login-box {
+  background: var(--card-bg); border-radius: var(--radius); padding: 40px 36px;
+  width: 380px; box-shadow: 0 12px 40px rgba(0,0,0,0.18); text-align: center;
+}
+.login-box h2 { font-size: 20px; margin-bottom: 8px; color: var(--primary); }
+.login-box .subtitle { font-size: 13px; color: var(--text-secondary); margin-bottom: 24px; }
+.login-box .login-tabs { display: flex; gap: 0; margin-bottom: 20px; border-radius: 8px; overflow: hidden; border: 1px solid var(--border); }
+.login-box .login-tab {
+  flex: 1; padding: 10px; cursor: pointer; font-size: 14px; font-weight: 500;
+  background: #f8f9fb; color: var(--text-secondary); border: none; transition: all 0.2s;
+}
+.login-box .login-tab.active { background: var(--primary); color: #fff; }
+.login-box .form-group { margin-bottom: 14px; text-align: left; }
+.login-box label { display: block; font-size: 13px; margin-bottom: 4px; color: var(--text); }
+.login-box input {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; outline: none;
+}
+.login-box input:focus { border-color: var(--primary); }
+.login-box .login-btn { width: 100%; margin-top: 8px; }
+.login-box .login-err { color: var(--danger); font-size: 12px; margin-top: 8px; display: none; }
+
+.header {
+  height: var(--header-h); background: var(--card-bg); border-bottom: 1px solid var(--border);
+  display: flex; align-items: center; justify-content: space-between; padding: 0 24px;
+  position: sticky; top: 0; z-index: 100; box-shadow: var(--shadow);
+}
+.header h1 { font-size: 18px; font-weight: 600; color: var(--primary); }
+.header .info { font-size: 13px; color: var(--text-secondary); display: flex; align-items: center; gap: 16px; }
+.header .role-badge { padding: 3px 12px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.header .role-badge.admin { background: #e8f0fe; color: var(--primary); }
+.header .role-badge.tech { background: #e6f7ee; color: var(--success); }
+.layout { display: flex; min-height: calc(100vh - var(--header-h)); }
+.sidebar { width: var(--sidebar-w); background: var(--card-bg); border-right: 1px solid var(--border); padding: 8px 0; flex-shrink: 0; }
+.sidebar .nav-item {
+  display: flex; align-items: center; gap: 10px; padding: 11px 24px; cursor: pointer;
+  font-size: 14px; color: var(--text-secondary); transition: all 0.2s;
+  border-left: 3px solid transparent; margin: 1px 0;
+}
+.sidebar .nav-item:hover { background: #f8f9fb; color: var(--text); }
+.sidebar .nav-item.active { background: #e8f0fe; color: var(--primary); border-left-color: var(--primary); font-weight: 500; }
+.sidebar .nav-item .icon { font-size: 18px; width: 24px; text-align: center; }
+.sidebar .nav-section { font-size: 11px; color: #b0b8c4; padding: 8px 24px 4px; text-transform: uppercase; letter-spacing: 1px; }
+.main { flex: 1; padding: 24px; overflow-y: auto; max-height: calc(100vh - var(--header-h)); }
+.page { display: none; }
+.page.active { display: block; }
+
+.stats-row { display: grid; grid-template-columns: repeat(auto-fit, minmax(220px, 1fr)); gap: 16px; margin-bottom: 24px; }
+.stat-card { background: var(--card-bg); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); border-left: 4px solid var(--primary); }
+.stat-card.warn { border-left-color: var(--warning); } .stat-card.danger { border-left-color: var(--danger); } .stat-card.success { border-left-color: var(--success); }
+.stat-card .label { font-size: 13px; color: var(--text-secondary); margin-bottom: 8px; }
+.stat-card .value { font-size: 28px; font-weight: 700; color: var(--text); }
+.stat-card .sub { font-size: 12px; color: var(--text-secondary); margin-top: 4px; }
+
+.chart-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin-bottom: 24px; }
+@media (max-width: 1100px) { .chart-grid { grid-template-columns: 1fr; } }
+.chart-card { background: var(--card-bg); border-radius: var(--radius); padding: 20px; box-shadow: var(--shadow); }
+.chart-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 16px; color: var(--text); }
+.chart-card canvas { max-height: 300px; }
+
+.table-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; margin-bottom: 24px; }
+.table-card h3 { font-size: 15px; font-weight: 600; padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.table-wrap { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13px; }
+th { text-align: left; padding: 10px 14px; background: #f8f9fb; color: var(--text-secondary); font-weight: 500; border-bottom: 1px solid var(--border); white-space: nowrap; }
+td { padding: 8px 14px; border-bottom: 1px solid var(--border); }
+tr:hover { background: #f8f9fb; }
+.badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 12px; font-weight: 500; }
+.badge-danger { background: #fde8e8; color: var(--danger); } .badge-warn { background: #fef3e2; color: var(--warning); }
+.badge-success { background: #e6f7ee; color: var(--success); } .badge-info { background: #e8f0fe; color: var(--primary); }
+
+.waterline-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 16px; }
+.waterline-card { background: var(--card-bg); border-radius: var(--radius); padding: 16px; box-shadow: var(--shadow); }
+.waterline-card .emp-name { font-weight: 600; font-size: 14px; margin-bottom: 4px; }
+.waterline-card .emp-id { font-size: 12px; color: var(--text-secondary); margin-bottom: 12px; }
+.meter-bar { height: 10px; background: #e8ecf1; border-radius: 5px; overflow: hidden; margin-bottom: 8px; }
+.meter-fill { height: 100%; border-radius: 5px; transition: width 0.5s ease; }
+.meter-fill.safe { background: var(--success); } .meter-fill.warn { background: var(--warning); } .meter-fill.danger { background: var(--danger); }
+.meter-info { display: flex; justify-content: space-between; font-size: 12px; }
+.meter-info .ot-hours { font-weight: 500; } .meter-info .limit { color: var(--text-secondary); }
+
+.form-card { background: var(--card-bg); border-radius: var(--radius); padding: 24px; box-shadow: var(--shadow); max-width: 600px; margin-bottom: 24px; }
+.form-card h3 { font-size: 15px; font-weight: 600; margin-bottom: 20px; }
+.form-group { margin-bottom: 16px; }
+.form-group label { display: block; font-size: 13px; font-weight: 500; margin-bottom: 6px; color: var(--text); }
+.form-group input, .form-group select, .form-group textarea {
+  width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 14px; font-family: inherit; outline: none; transition: border-color 0.2s;
+}
+.form-group input:focus, .form-group select:focus, .form-group textarea:focus { border-color: var(--primary); }
+.form-group textarea { resize: vertical; min-height: 80px; }
+.btn { padding: 10px 24px; border: none; border-radius: 8px; font-size: 14px; font-weight: 500; cursor: pointer; transition: all 0.2s; }
+.btn-primary { background: var(--primary); color: #fff; } .btn-primary:hover { background: #1557b0; }
+.btn-danger { background: var(--danger); color: #fff; } .btn-success { background: var(--success); color: #fff; }
+.btn-outline { background: transparent; border: 1px solid var(--border); color: var(--text); } .btn-outline:hover { background: #f8f9fb; }
+.btn-sm { padding: 5px 12px; font-size: 12px; } .btn-xs { padding: 3px 8px; font-size: 11px; border-radius: 4px; }
+.btn-group { display: flex; gap: 8px; }
+
+.ot-item { display: flex; align-items: center; justify-content: space-between; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.ot-item .ot-info { flex: 1; } .ot-item .ot-info .ot-emp { font-weight: 500; font-size: 14px; }
+.ot-item .ot-info .ot-detail { font-size: 12px; color: var(--text-secondary); margin-top: 2px; }
+
+.filter-bar { display: flex; gap: 12px; align-items: center; margin-bottom: 20px; flex-wrap: wrap; padding: 12px 20px; }
+.filter-bar select, .filter-bar input { padding: 8px 14px; border: 1px solid var(--border); border-radius: 8px; font-size: 13px; outline: none; }
+.filter-bar select:focus, .filter-bar input:focus { border-color: var(--primary); }
+.filter-bar .search-input { flex: 1; min-width: 200px; max-width: 350px; }
+
+.empty-state { text-align: center; padding: 48px 20px; color: var(--text-secondary); }
+.empty-state .icon { font-size: 48px; margin-bottom: 12px; }
+.alert-banner { display: flex; align-items: center; gap: 10px; padding: 12px 16px; border-radius: 8px; margin-bottom: 20px; font-size: 13px; }
+.alert-banner.warn { background: #fef3e2; color: #b45b06; border: 1px solid #fce4b8; }
+.alert-banner.danger { background: #fde8e8; color: #b91c1c; border: 1px solid #f8c4c4; }
+.alert-banner.success { background: #e6f7ee; color: #1a7a42; border: 1px solid #c3e6d2; }
+
+.import-zone { border: 2px dashed #d0d5dd; border-radius: var(--radius); padding: 40px; text-align: center; cursor: pointer; transition: all 0.2s; margin-bottom: 20px; background: #fafbfc; }
+.import-zone:hover { border-color: var(--primary); background: #f0f4ff; }
+.import-zone .icon { font-size: 40px; margin-bottom: 8px; }
+.import-zone .text { font-size: 14px; color: var(--text-secondary); }
+.import-zone .hint { font-size: 12px; color: #b0b8c4; margin-top: 4px; }
+.import-result { margin-top: 16px; padding: 12px 16px; border-radius: 8px; font-size: 13px; display: none; }
+.import-result.show { display: block; }
+
+.search-result-card { background: var(--card-bg); border-radius: var(--radius); box-shadow: var(--shadow); margin-bottom: 24px; overflow: hidden; }
+.search-result-card .sr-header { padding: 16px 20px; border-bottom: 1px solid var(--border); display: flex; align-items: center; justify-content: space-between; }
+.sr-header .sr-name { font-size: 16px; font-weight: 600; } .sr-header .sr-id { font-size: 13px; color: var(--text-secondary); }
+.quick-stats { display: flex; gap: 16px; margin-bottom: 20px; flex-wrap: wrap; }
+.quick-stat { background: var(--card-bg); border-radius: 8px; padding: 12px 20px; box-shadow: var(--shadow); text-align: center; min-width: 100px; }
+.quick-stat .qs-val { font-size: 22px; font-weight: 700; } .quick-stat .qs-label { font-size: 11px; color: var(--text-secondary); margin-top: 2px; }
+
+.readonly-badge { display: inline-block; padding: 3px 10px; border-radius: 10px; background: #e6f7ee; color: var(--success); font-size: 11px; }
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .header { padding: 0 12px; height: 50px; }
+  .header h1 { font-size: 14px; }
+  .header .info { font-size: 11px; gap: 8px; }
+  .header .info span { margin-left: 0; }
+  .layout { flex-direction: column; }
+  .sidebar {
+    width: 100%; display: flex; flex-wrap: wrap; padding: 4px; border-right: none;
+    border-bottom: 1px solid var(--border); overflow-x: auto; flex-shrink: 0;
+  }
+  .sidebar .nav-section { display: none; }
+  .sidebar .nav-item {
+    padding: 8px 12px; font-size: 12px; border-left: none; border-bottom: 2px solid transparent;
+    white-space: nowrap; flex-shrink: 0;
+  }
+  .sidebar .nav-item.active { border-bottom-color: var(--primary); }
+  .main { padding: 12px; max-height: none; }
+  .stats-row { grid-template-columns: repeat(2, 1fr); gap: 8px; }
+  .stat-card { padding: 12px; }
+  .stat-card .value { font-size: 22px; }
+  .stat-card .label { font-size: 11px; }
+  .chart-grid { grid-template-columns: 1fr; }
+  .chart-card canvas { max-height: 220px; }
+  .form-card { max-width: 100%; padding: 16px; }
+  .filter-bar { flex-wrap: wrap; gap: 8px; padding: 10px; }
+  .filter-bar .search-input { max-width: 100%; }
+  .login-box { width: 90%; padding: 24px 20px; }
+  .waterline-grid { grid-template-columns: 1fr; }
+  .btn { padding: 8px 16px; font-size: 13px; }
+  table { font-size: 11px; }
+  th, td { padding: 6px 8px; }
+  .quick-stats { gap: 8px; }
+  .quick-stat { padding: 8px 14px; min-width: 80px; }
+  .quick-stat .qs-val { font-size: 18px; }
+}
+
+</style>
+</head>
+<body>
+
+<!-- Login Overlay -->
+<div class="login-overlay" id="loginOverlay">
+  <div class="login-box">
+    <h2>🔧 设备组考勤管理系统</h2>
+    <div class="subtitle">请选择登录身份</div>
+    <div class="login-tabs">
+      <button class="login-tab active" onclick="switchLoginTab('admin')" id="tabAdmin">🔐 管理员</button>
+      <button class="login-tab" onclick="switchLoginTab('tech')" id="tabTech">👤 技术员</button>
+    </div>
+    <div id="adminFields">
+      <div class="form-group"><label>账号</label><input type="text" id="loginUser" placeholder="请输入管理员账号" autocomplete="off"></div>
+      <div class="form-group"><label>密码</label><input type="password" id="loginPass" placeholder="请输入密码"></div>
+      <button class="btn btn-primary login-btn" onclick="doLogin()">登 录</button>
+      <div class="login-err" id="loginErr">账号或密码错误</div>
+    </div>
+    <div id="techFields" style="display:none;">
+      <p style="color:var(--text-secondary);font-size:13px;margin-bottom:20px;">技术员无需账号密码，可直接进入查看</p>
+      <button class="btn btn-success login-btn" onclick="doTechLogin()">进入系统（仅查看）</button>
+    </div>
+  </div>
+</div>
+
+<div class="header">
+  <h1>🔧 SYRC 设备组考勤管理系统</h1>
+  <div class="info">
+    <span class="role-badge" id="roleBadge"></span>
+    <span>👤 负责人：刘启成</span>
+    <span>📅 <span id="currentDate"></span></span>
+    <span>👥 团队：<span id="teamCount"></span>人</span>
+    <button class="btn btn-outline btn-sm" onclick="doLogout()" style="margin-left:8px;">退出</button>
+  </div>
+</div>
+
+<div class="layout">
+  <div class="sidebar" id="sidebar">
+    <div class="nav-section">通用</div>
+    <div class="nav-item active" data-page="dashboard"><span class="icon">📊</span>考勤看板</div>
+    <div class="nav-item" data-page="search"><span class="icon">🔍</span>员工查询</div>
+    <div class="nav-item" data-page="schedule"><span class="icon">🗓️</span>排班表</div>
+    <div class="nav-section admin-only">管理</div>
+    <div class="nav-item admin-only" data-page="overtime"><span class="icon">📝</span>加班申请</div>
+    <div class="nav-item admin-only" data-page="waterline"><span class="icon">⚠️</span>安全水位线</div>
+    <div class="nav-item admin-only" data-page="import"><span class="icon">📥</span>导入考勤表</div>
+    <div class="nav-item admin-only" data-page="editable"><span class="icon">✏️</span>考勤录入</div>
+  </div>
+
+  <div class="main">
+    <!-- ===== 考勤看板 ===== -->
+    <div class="page active" id="page-dashboard">
+      <div class="stats-row" id="statsCards"></div>
+      <div class="chart-grid">
+        <div class="chart-card"><h3>📈 月度加班趋势</h3><canvas id="trendChart"></canvas></div>
+        <div class="chart-card"><h3>📊 加班类型分布</h3><canvas id="otTypeChart"></canvas></div>
+      </div>
+      <div class="table-card">
+        <h3>🏆 本月加班排行 <select id="rankMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;"></select></h3>
+        <div class="table-wrap"><table><thead><tr><th>排名</th><th>工号</th><th>姓名</th><th>正常班工时</th><th>平时加班</th><th>周末加班</th><th>节假日加班</th><th>总加班</th><th>总工时</th><th style="color:#7c3aed;">🔮预测总工时</th><th>状态</th></tr></thead><tbody id="rankTable"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- ===== 员工查询 ===== -->
+    <div class="page" id="page-search">
+      <div class="filter-bar">
+        <span style="font-weight:500;">🔍 查询员工：</span>
+        <input type="text" class="search-input" id="searchInput" placeholder="输入姓名或工号搜索..." oninput="onSearchInput()">
+        <select id="searchMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;"></select>
+        <button class="btn btn-primary btn-sm" onclick="doSearch()">搜索</button>
+      </div>
+      <div id="searchQuickList" style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;"></div>
+      <div id="searchResult"></div>
+    </div>
+
+    <!-- ===== 排班表 ===== -->
+    <div class="page" id="page-schedule">
+      <div class="filter-bar">
+        <span style="font-weight:500;">🗓️ 排班月份：</span>
+        <select id="scheduleMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;" onchange="renderSchedule()"></select>
+        <span style="margin-left:16px;font-size:12px;color:var(--text-secondary);">⏱️ 规则：每周工时≤61h，超限下周自动排休1天</span>
+      </div>
+      <div id="scheduleContent"></div>
+    </div>
+
+    <!-- ===== 加班申请 (admin) ===== -->
+    <div class="page" id="page-overtime">
+      <div class="form-card">
+        <h3>📝 提交加班申请</h3>
+        <div class="form-group"><label>员工</label><select id="otEmp"><option value="">请选择员工</option></select></div>
+        <div class="form-group"><label>加班日期</label><input type="date" id="otDate"></div>
+        <div class="form-group"><label>加班类型</label><select id="otType"><option value="weekday">平时加班</option><option value="weekend">周末加班</option><option value="holiday">节假日加班</option></select></div>
+        <div class="form-group"><label>加班时长（小时）</label><input type="number" id="otHours" placeholder="请输入加班时长" min="0.5" max="12" step="0.5"></div>
+        <div class="form-group"><label>加班原因</label><textarea id="otReason" placeholder="请简要说明加班原因..."></textarea></div>
+        <button class="btn btn-primary" onclick="submitOT()">提交申请</button>
+      </div>
+      <div class="table-card">
+        <h3>📋 加班申请记录</h3>
+        <div class="filter-bar"><select id="otFilterStatus" onchange="renderOTList()"><option value="all">全部状态</option><option value="pending">待审批</option><option value="approved">已通过</option><option value="rejected">已驳回</option></select></div>
+        <div id="otList" style="max-height:500px;overflow-y:auto;"></div>
+      </div>
+    </div>
+
+    <!-- ===== 安全水位线 (admin) ===== -->
+    <div class="page" id="page-waterline">
+      <div class="alert-banner warn" id="waterlineBanner">⚙️ 当前设置：超标上限 36h/月，预警线 30h/月</div>
+      <div class="filter-bar" style="background:#f8f9fb;border-radius:8px;padding:10px 14px;margin-bottom:16px;">
+        <span style="font-weight:500;font-size:13px;">⚙️ 水位线设置：</span>
+        <span style="font-size:12px;">超标上限</span><input type="number" id="wlLimitInput" value="36" min="1" max="500" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
+        <span style="font-size:12px;">h/月</span>
+        <span style="font-size:12px;">预警线</span><input type="number" id="wlWarnInput" value="30" min="1" max="500" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
+        <span style="font-size:12px;">h/月</span>
+        <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
+      </div>
+      <div class="stats-row" id="waterlineStats"></div>
+      <div class="filter-bar"><span style="font-weight:500;">选择月份：</span><select id="wlMonth" onchange="renderWaterline()"></select></div>
+      <h3 style="font-size:15px;font-weight:600;margin:16px 0 12px;">👥 员工加班水位监控</h3>
+      <div class="waterline-grid" id="waterlineGrid"></div>
+    </div>
+
+    <!-- ===== 导入考勤表 (admin) ===== -->
+    <div class="page" id="page-import">
+      <div class="form-card" style="max-width:700px;">
+        <h3>📥 导入考勤 Excel 表</h3>
+        <div class="import-zone" id="importZone" onclick="document.getElementById('fileInput').click()">
+          <div class="icon">📁</div><div class="text">点击选择或拖拽考勤 Excel 文件到此处</div><div class="hint">支持 .xlsx / .xls 格式</div>
+        </div>
+        <input type="file" id="fileInput" accept=".xlsx,.xls" style="display:none;" onchange="handleFileImport(event)">
+        <div class="import-result" id="importResult"></div>
+      </div>
+      <div class="table-card"><h3>📋 当前数据概况</h3><div id="dataSummary"></div></div>
+    </div>
+
+    <!-- ===== 考勤录入 (admin) ===== -->
+    <div class="page" id="page-editable">
+      <div class="alert-banner success">✅ 按天录入出勤工时。修改后自动保存，无需手动点击保存。正常班默认8h，加班为额外工时。</div>
+      <div class="filter-bar">
+        <span style="font-weight:500;">选择月份：</span><select id="editMonth" onchange="renderEditableTable()"></select>
+        <button class="btn btn-outline btn-sm" onclick="resetEdits()">↩ 撤销修改</button>
+        <span style="font-size:12px;color:var(--text-secondary);" id="editStatus"></span>
+      </div>
+      <div class="filter-bar" style="background:#f8f9fb;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-weight:500;font-size:13px;">⚡ 一键录入：</span>
+        <button class="btn btn-success btn-sm" onclick="batchFillToday(8)">✅ 今日全部上班 (8h)</button>
+        <button class="btn btn-outline btn-sm" onclick="batchFillToday(0)">❌ 今日全部休息</button>
+        <span style="font-size:11px;color:var(--text-secondary);margin-left:8px;">今日：<span id="todayLabel"></span></span>
+      </div>
+      <div class="filter-bar" style="background:#f0f4ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-weight:500;font-size:13px;">🔧 工段管理：</span>
+        <select id="sectionEmpSelect" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;min-width:120px;"></select>
+        <select id="sectionSelect" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+          <option value="模组">模组</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option><option value="立库">立库</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="setSection()">设置工段</button>
+        <span style="font-size:11px;color:var(--text-secondary);" id="sectionStatus"></span>
+      </div>
+      <div class="filter-bar" style="background:#f8f0ff;border-radius:8px;padding:10px 14px;margin-bottom:14px;">
+        <span style="font-weight:500;font-size:13px;">➕ 新增员工：</span>
+        <input type="text" id="newEmpName" placeholder="姓名" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+        <input type="text" id="newEmpId" placeholder="工号" style="width:90px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+        <select id="newEmpPos" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+          <option value="设备技术员">设备技术员</option><option value="设备主管">设备主管</option><option value="实习生">实习生</option>
+        </select>
+        <select id="newEmpSection" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
+          <option value="">选择工段</option><option value="模组">模组</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option>
+        </select>
+        <button class="btn btn-primary btn-sm" onclick="addEmployee()">添加</button>
+        <span style="font-size:11px;color:var(--text-secondary);" id="addEmpStatus"></span>
+      </div>
+      <div class="table-card"><div class="table-wrap" style="max-height:70vh;overflow:auto;" id="editTableWrap"></div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+// ===================== AUTH =====================
+let isAdmin = false;
+function switchLoginTab(tab) {
+  document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
+  document.getElementById('tab' + (tab === 'admin' ? 'Admin' : 'Tech')).classList.add('active');
+  document.getElementById('adminFields').style.display = tab === 'admin' ? '' : 'none';
+  document.getElementById('techFields').style.display = tab === 'tech' ? '' : 'none';
+  document.getElementById('loginErr').style.display = 'none';
+}
+function doLogin() {
+  const u = document.getElementById('loginUser').value.trim();
+  const p = document.getElementById('loginPass').value;
+  if (u === 'admin' && p === 'admin123') {
+    isAdmin = true;
+    sessionStorage.setItem('attRole', 'admin');
+    initApp();
+  } else {
+    document.getElementById('loginErr').style.display = 'block';
+  }
+}
+// Enter key to login
+(function() {
+  const loginPass = document.getElementById('loginPass');
+  if (loginPass) {
+    loginPass.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') doLogin();
+    });
+  }
+  const loginUser = document.getElementById('loginUser');
+  if (loginUser) {
+    loginUser.addEventListener('keydown', function(e) {
+      if (e.key === 'Enter') document.getElementById('loginPass').focus();
+    });
+  }
+})();
+function doTechLogin() {
+  isAdmin = false;
+  sessionStorage.setItem('attRole', 'tech');
+  initApp();
+}
+function doLogout() {
+  sessionStorage.removeItem('attRole');
+  location.reload();
+}
+
+// ===================== DATA =====================
+let appData = null;
+let editedData = {};
+let dailyEdits = {};
+let otApplications = [];
+let OT_LIMIT = 36;
+let OT_WARN = 30;
+let sectionAssignments = {};
+
+// Helper: get employee display name with section
+function empDisplay(empId) {
+  var emp = appData.employees[empId];
+  if (!emp) return empId;
+  var sec = sectionAssignments[empId] || '';
+  return sec ? emp.name + '<span style="font-size:10px;color:var(--text-secondary);margin-left:4px;">[' + sec + ']</span>' : emp.name;
+}
+function getSection(empId) { return sectionAssignments[empId] || ''; }
+
+// API helper
+const API = {
+  async get(path) {
+    const r = await fetch(path);
+    if (!r.ok) throw new Error('API error: '+r.status);
+    return r.json();
+  },
+  async post(path, data) {
+    const r = await fetch(path, { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (!r.ok) throw new Error('API error: '+r.status);
+    return r.json();
+  },
+  async del(path) {
+    const r = await fetch(path, { method: 'DELETE' });
+    if (!r.ok) throw new Error('API error: '+r.status);
+    return r.json();
+  },
+  async put(path, data) {
+    const r = await fetch(path, { method: 'PUT', headers: {'Content-Type':'application/json'}, body: JSON.stringify(data) });
+    if (!r.ok) throw new Error('API error: '+r.status);
+    return r.json();
+  }
+};
+
+// Sync overtime apps to server
+async function syncOTApps() {
+  try { await API.post('/api/overtime/batch', otApplications); } catch(e) { console.warn('OT sync failed:', e); }
+}
+
+function getCurrentMonth() { const now = new Date(); return `2026年${now.getMonth()+1}月`; }
+
+function getOT(r) {
+  const wd = parseFloat(r.weekday_ot)||0, we = parseFloat(r.weekend_ot)||0, ho = parseFloat(r.holiday_ot)||0;
+  return wd+we+ho;
+}
+function getDayOfWeek(monthStr, day) {
+  const m = parseInt(monthStr.replace('2026年','').replace('月',''));
+  return new Date(2026, m-1, day).getDay();
+}
+function isWeekend(monthStr, day) { const dow = getDayOfWeek(monthStr, day); return dow===0||dow===6; }
+const WEEKDAY_NAMES = ['日','一','二','三','四','五','六'];
+
+function typeToNormalHours(t) {
+  if (t===null||t===undefined||t==='/'||t==='') return 0;
+  const s = String(t).trim(); if (s==='休'||s==='假') return 0; if (s==='4') return 8;
+  const n = parseFloat(s); return isNaN(n)?0:n;
+}
+function hoursToNum(v) { if (v===null||v===undefined||v==='/'||v==='') return 0; return parseFloat(v)||0; }
+
+function computeTotals(daily, month) {
+  let rh=0, wdo=0, weo=0, ho=0;
+  for (const d of daily) {
+    const n = (d._normal!==undefined)?d._normal:0, o = (d._ot!==undefined)?d._ot:0;
+    if (isWeekend(month, d.day)) { weo += n+o; }
+    else { const reg = Math.min(n,8); rh += reg; wdo += Math.max(0,n-8)+o; }
+  }
+  const th = rh+wdo+weo+ho;
+  return { regular_hours: Math.round(rh*10)/10, weekday_ot: Math.round(wdo*10)/10, weekend_ot: Math.round(weo*10)/10, holiday_ot: Math.round(ho*10)/10, total_hours: Math.round(th*10)/10 };
+}
+
+function predictRemaining(monthStr) {
+  const now = new Date();
+  const m = parseInt(monthStr.replace('2026年','').replace('月',''));
+  if (now.getFullYear()!==2026||now.getMonth()+1!==m) return null;
+  const dim = new Date(2026,m,0).getDate(), today = now.getDate();
+  let rd=0, rs=0, rw=0;
+  for (let d=today+1; d<=dim; d++) {
+    const dow = getDayOfWeek(monthStr, d); if (dow===0) continue;
+    rd++; if (dow===6) rs++; else rw++;
+  }
+  return { remainingDays:rd, remainingWeekdays:rw, remainingSaturdays:rs, regular_hours:rw*8, weekday_ot:rw*2, weekend_ot:rs*10, total_hours:rw*10+rs*10 };
+}
+
+function getEffectiveTotal(r, month) {
+  const th = parseFloat(r.total_hours)||0; const pred = predictRemaining(month);
+  return pred ? th+pred.total_hours : th;
+}
+
+function getMonthData(month) {
+  // Auto-create month if it doesn't exist, matching employee order from an existing month
+  if (!appData.attendance[month]) {
+    appData.attendance[month] = [];
+    var m = parseInt(month.replace('2026年','').replace('月',''));
+    var numDays = new Date(2026, m, 0).getDate();
+    // Use employee order from the first existing month to stay consistent
+    var refMonth = Object.keys(appData.attendance)[0];
+    var refData = refMonth ? (appData.attendance[refMonth] || []) : [];
+    var orderedEmpIds = refData.map(function(r){ return r.emp_id; });
+    // Append any new employees not in the reference month
+    var allEmpIds = Object.keys(appData.employees);
+    for (var ei = 0; ei < allEmpIds.length; ei++) {
+      if (orderedEmpIds.indexOf(allEmpIds[ei]) === -1) {
+        orderedEmpIds.push(allEmpIds[ei]);
+      }
+    }
+    for (var ei = 0; ei < orderedEmpIds.length; ei++) {
+      var empId = orderedEmpIds[ei];
+      var emp = appData.employees[empId];
+      if (!emp) continue;
+      var emptyDaily = [];
+      for (var d = 1; d <= numDays; d++) {
+        emptyDaily.push({ day: d, type: '/', type2: '/', hours: '/' });
+      }
+      appData.attendance[month].push({
+        emp_id: empId, name: emp.name, position: emp.position,
+        daily: emptyDaily, regular_hours: 0, weekday_ot: 0, weekend_ot: 0, holiday_ot: 0, total_hours: 0
+      });
+    }
+  }
+  var base = appData.attendance[month]||[], edits = editedData[month]||{}, dEdits = dailyEdits[month]||{};
+  var today = getTodayInMonth(month);
+  return base.map(function(r) {
+    var record = Object.assign({}, r);
+    if (edits[r.emp_id]) record = Object.assign(record, edits[r.emp_id]);
+    var newDaily = (record.daily||[]).map(function(d) {
+      var dk = String(d.day), isFutureDay = today!==null && d.day>today;
+      if (isFutureDay) return Object.assign({}, d, {_normal:0, _ot:0});
+      var edit = dEdits[r.emp_id] ? dEdits[r.emp_id][dk] : undefined;
+      if (edit!==undefined) {
+        if (typeof edit==='object'&&edit!==null) return Object.assign({}, d, {_normal:edit.n, _ot:edit.o});
+        else return Object.assign({}, d, {_normal:parseFloat(edit)||0, _ot:0});
+      }
+      return Object.assign({}, d, {_normal:typeToNormalHours(d.type), _ot:hoursToNum(d.hours)});
+    });
+    record.daily = newDaily;
+    var totals = computeTotals(newDaily, month);
+    record.weekday_ot=totals.weekday_ot; record.weekend_ot=totals.weekend_ot;
+    record.holiday_ot=totals.holiday_ot; record.regular_hours=totals.regular_hours;
+    record.total_hours=totals.total_hours;
+    return record;
+  });
+}
+
+async function initApp() {
+  try {
+    await loadData();
+    // Only hide login overlay after everything is successfully loaded
+    document.getElementById('loginOverlay').style.display = 'none';
+    document.getElementById('roleBadge').textContent = isAdmin ? '🔐 管理员' : '👤 技术员';
+    document.getElementById('roleBadge').className = 'role-badge ' + (isAdmin ? 'admin' : 'tech');
+
+    // Hide admin-only elements for tech role
+    document.querySelectorAll('.admin-only').forEach(el => el.style.display = isAdmin ? '' : 'none');
+    if (!isAdmin) {
+      document.querySelectorAll('.nav-section.admin-only').forEach(el => el.style.display = 'none');
+    }
+  } catch(e) {
+    console.error('初始化失败:', e);
+    document.getElementById('loginErr').textContent = '系统加载失败，请刷新页面重试 (' + (e.message||'') + ')';
+    document.getElementById('loginErr').style.display = 'block';
+    // Keep login overlay visible
+  }
+}
+
+async function loadData() {
+  // Load from server API
+  const serverData = await API.get('/api/data');
+  
+  // Build appData structure
+  appData = {
+    employees: serverData.employees,
+    attendance: serverData.attendance
+  };
+  
+  // Merge custom employees
+  const customEmps = serverData.customEmployees || {};
+  for (const [eid, info] of Object.entries(customEmps)) {
+    if (!appData.employees[eid]) {
+      appData.employees[eid] = info;
+      for (const month of Object.keys(appData.attendance)) {
+        const numDays = appData.attendance[month].length > 0 ? (appData.attendance[month][0].daily || []).length : 31;
+        const emptyDaily = [];
+        for (let d = 1; d <= numDays; d++) {
+          emptyDaily.push({ day: d, type: '/', type2: '/', hours: '/' });
+        }
+        appData.attendance[month].push({
+          emp_id: eid, name: info.name, position: info.position,
+          daily: emptyDaily, regular_hours: 0, weekday_ot: 0, weekend_ot: 0, holiday_ot: 0, total_hours: 0
+        });
+      }
+    }
+  }
+  
+  // Load edited data from server
+  editedData = serverData.editedData || {};
+  dailyEdits = serverData.dailyEdits || {};
+  
+  // Load overtime applications
+  otApplications = serverData.otApplications || [];
+  
+  // Load settings
+  if (serverData.settings) {
+    OT_LIMIT = parseFloat(serverData.settings.otLimit) || 36;
+    OT_WARN = parseFloat(serverData.settings.otWarn) || 30;
+  }
+  sectionAssignments = serverData.sectionAssignments || {};
+  
+  document.getElementById('teamCount').textContent = Object.keys(appData.employees).length;
+  document.getElementById('currentDate').textContent = new Date().toLocaleDateString('zh-CN');
+  initMonthSelects(); if (isAdmin) { initOTForm(); initEditMonth(); }
+  renderDashboard(); if (isAdmin) renderOTList();
+  initSearchQuickList(); if (isAdmin) renderDataSummary();
+}
+
+// Check session on load
+(function() {
+  try {
+    const role = sessionStorage.getItem('attRole');
+    if (role === 'admin') { isAdmin = true; initApp(); }
+    else if (role === 'tech') { isAdmin = false; initApp(); }
+  } catch(e) {
+    console.error('Session check failed:', e);
+    // Login overlay stays visible, user can manually log in
+  }
+})();
+
+// ===================== NAVIGATION =====================
+document.querySelectorAll('.nav-item').forEach(item => {
+  item.addEventListener('click', () => {
+    if (!isAdmin && item.dataset.page !== 'dashboard' && item.dataset.page !== 'search' && item.dataset.page !== 'schedule') return;
+    document.querySelectorAll('.nav-item').forEach(i => i.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    item.classList.add('active');
+    document.getElementById('page-' + item.dataset.page).classList.add('active');
+    const p = item.dataset.page;
+    if (p==='waterline') renderWaterline();
+    if (p==='dashboard') renderDashboard();
+    if (p==='overtime') renderOTList();
+    if (p==='import') renderDataSummary();
+    if (p==='editable') { initEditMonth(); renderEditableTable(); refreshSectionSelect(); }
+    if (p==='schedule') { initScheduleMonth(); renderSchedule(); }
+  });
+});
+
+// ===================== MONTH SELECTS =====================
+function findDefaultMonth() {
+  const months = Object.keys(appData.attendance), current = getCurrentMonth();
+  if (months.includes(current)) return current;
+  const now = new Date(), curM = now.getMonth()+1;
+  const nums = months.map(m=>parseInt(m.replace('2026年','').replace('月','')));
+  const closest = nums.reduce((p,c)=>Math.abs(c-curM)<Math.abs(p-curM)?c:p);
+  return `2026年${closest}月`;
+}
+function initMonthSelects() {
+  // Generate all months from existing data + current year all months
+  var existing = Object.keys(appData.attendance);
+  var allMonths = [];
+  var now = new Date();
+  var curYear = now.getFullYear();
+  // Always include all months of current year
+  for (var mi = 1; mi <= 12; mi++) {
+    allMonths.push(curYear+'年'+mi+'月');
+  }
+  // Merge existing months that might be from other years
+  for (var ei = 0; ei < existing.length; ei++) {
+    if (allMonths.indexOf(existing[ei]) === -1) allMonths.push(existing[ei]);
+  }
+  allMonths.sort();
+  var dm = findDefaultMonth();
+
+  ['rankMonth','wlMonth','searchMonth'].forEach(function(id){
+    var s = document.getElementById(id); if (!s) return;
+    s.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
+    s.value = dm;
+    s.addEventListener('change', function(){ if(id==='rankMonth') renderRankTable(); if(id==='wlMonth') renderWaterline(); });
+  });
+}
+function initOTForm() {
+  const sel=document.getElementById('otEmp'); if(!sel) return;
+  const emps=Object.entries(appData.employees).sort((a,b)=>a[1].name.localeCompare(b[1].name,'zh'));
+  sel.innerHTML='<option value="">请选择员工</option>'+emps.map(([id,e])=>`<option value="${id}">${e.name} (${id})</option>`).join('');
+  document.getElementById('otDate').value=new Date().toISOString().split('T')[0];
+}
+function initEditMonth() {
+  var sel=document.getElementById('editMonth'); if(!sel) return;
+  var curYear = new Date().getFullYear();
+  var allMonths = [];
+  for (var mi = 1; mi <= 12; mi++) allMonths.push(curYear+'年'+mi+'月');
+  var dm = findDefaultMonth();
+  sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
+  sel.value = dm;
+}
+
+// ===================== DASHBOARD =====================
+let trendChart=null, otTypeChart=null;
+
+function showChartFallback(canvasId, title, err) {
+  const canvas = document.getElementById(canvasId);
+  if (!canvas) return;
+  const parent = canvas.parentElement;
+  const msg = err && err.message ? err.message : 'Chart.js 库加载失败';
+  const fallback = document.createElement('div');
+  fallback.style.cssText = 'display:flex;flex-direction:column;align-items:center;justify-content:center;height:250px;background:#fffbe6;border:2px dashed #f0c040;border-radius:8px;color:#8b6914;';
+  fallback.innerHTML = `<div style="font-size:36px;margin-bottom:8px;">📊</div><div style="font-weight:600;margin-bottom:4px;">${title}</div><div style="font-size:12px;color:#999;">图表组件加载失败（${msg}）</div><div style="font-size:12px;margin-top:4px;">请检查网络连接后刷新页面</div>`;
+  parent.replaceChild(fallback, canvas);
+}
+
+function renderDashboard() {
+  const dm = findDefaultMonth(), data = getMonthData(dm);
+  const tr = data.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
+  const twd = data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
+  const twe = data.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
+  const tho = data.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
+  const tot = twd+twe+tho, avg = data.length>0?(tot/data.length).toFixed(1):0;
+  const ex = data.filter(r=>getEffectiveTotal(r,dm)>OT_WARN).length;
+  const pred = predictRemaining(dm);
+  const predHTML = pred ? `<div class="stat-card" style="border-left-color:#9b59b6;"><div class="label">🔮 本月预测增量</div><div class="value">${pred.total_hours}h</div><div class="sub">剩余${pred.remainingDays}个工作日 · 人均+${(pred.total_hours/(data.length||1)).toFixed(1)}h</div></div>` : '';
+  document.getElementById('statsCards').innerHTML = `
+    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${data.length}</div><div class="sub">${dm} · 设备技术员</div></div>
+    <div class="stat-card warn"><div class="label">⏰ 本月总加班</div><div class="value">${tot.toFixed(1)}h</div><div class="sub">人均 ${avg}h/人</div></div>
+    <div class="stat-card ${ex>0?'danger':'success'}"><div class="label">⚠️ 超预警线人数</div><div class="value">${ex}</div><div class="sub">预警线：${OT_WARN}h/月</div></div>
+    <div class="stat-card"><div class="label">📋 正常班总工时</div><div class="value">${tr.toFixed(0)}h</div><div class="sub">总加班：${tot.toFixed(0)}h</div></div>
+    ${predHTML}`;
+  try { renderTrendChart(Object.keys(appData.attendance)); } catch(e) { console.warn('趋势图渲染失败:',e); showChartFallback('trendChart','月度加班趋势',e); }
+  try { renderOTTypeChart(data); } catch(e) { console.warn('类型分布图渲染失败:',e); showChartFallback('otTypeChart','加班类型分布',e); }
+  try { renderRankTable(); } catch(e) { console.warn('排行表渲染失败:',e); document.getElementById('rankTable').innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary);">数据加载失败，请刷新页面重试</td></tr>'; }
+}
+
+function renderTrendChart(months) {
+  const ctx = document.getElementById('trendChart').getContext('2d');
+  if (trendChart) trendChart.destroy();
+  if (typeof Chart === 'undefined') throw new Error('Chart.js 未加载');
+  const labels = months.map(m=>m.replace('2026年','').replace('月',''));
+  const wd=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0));
+  const we=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0));
+  const ho=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0));
+  trendChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[
+    {label:'平时加班',data:wd,backgroundColor:'#e74c3c',borderRadius:4},
+    {label:'周末加班',data:we,backgroundColor:'#f39c12',borderRadius:4},
+    {label:'节假日加班',data:ho,backgroundColor:'#9b59b6',borderRadius:4}
+  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:20}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:'小时 (h)'},grid:{color:'#f0f0f0'}}}}});
+}
+
+function renderOTTypeChart(data) {
+  const ctx = document.getElementById('otTypeChart').getContext('2d');
+  if (otTypeChart) otTypeChart.destroy();
+  if (typeof Chart === 'undefined') throw new Error('Chart.js 未加载');
+  const tw=data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
+  const te=data.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
+  const th=data.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
+  otTypeChart=new Chart(ctx,{type:'doughnut',data:{labels:['平时加班','周末加班','节假日加班'],datasets:[{data:[tw,te,th],backgroundColor:['#e74c3c','#f39c12','#9b59b6'],borderWidth:2,borderColor:'#fff'}]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:20}},tooltip:{callbacks:{label:ctx=>`${ctx.label}: ${ctx.parsed.toFixed(1)}h`}}}}});
+}
+
+function renderRankTable() {
+  const month = document.getElementById('rankMonth').value, data = [...getMonthData(month)], pred = predictRemaining(month);
+  data.sort((a,b)=>(parseFloat(b.total_hours)||0)-(parseFloat(a.total_hours)||0));
+  document.getElementById('rankTable').innerHTML = data.map((r,i)=>{
+    const totalOT=getOT(r), wd=parseFloat(r.weekday_ot)||0, we=parseFloat(r.weekend_ot)||0, ho=parseFloat(r.holiday_ot)||0;
+    const th=parseFloat(r.total_hours)||0, effTH=getEffectiveTotal(r,month);
+    let badge=effTH>OT_LIMIT?'badge-danger':effTH>OT_WARN?'badge-warn':'badge-success';
+    let status=effTH>OT_LIMIT?'已超标':effTH>OT_WARN?'预警':'正常';
+    const predTH=pred?th+pred.total_hours:th;
+    return `<tr><td><strong>${i+1}</strong></td><td>${r.emp_id}</td><td><strong>${r.name}</strong></td><td>${parseFloat(r.regular_hours)||0}h</td><td style="color:#e74c3c;font-weight:500;">${wd}h</td><td style="color:#f39c12;font-weight:500;">${we}h</td><td style="color:#9b59b6;font-weight:500;">${ho}h</td><td style="font-weight:700;">${totalOT.toFixed(1)}h</td><td>${th}h</td><td style="color:#7c3aed;font-weight:700;">${pred?predTH.toFixed(0):'-'}h</td><td><span class="badge ${badge}">${status}</span></td></tr>`;
+  }).join('');
+}
+
+// ===================== OVERTIME =====================
+async function submitOT() {
+  const empId=document.getElementById('otEmp').value, date=document.getElementById('otDate').value;
+  const type=document.getElementById('otType').value, hours=parseFloat(document.getElementById('otHours').value);
+  const reason=document.getElementById('otReason').value.trim();
+  if(!empId) return alert('请选择员工'); if(!date) return alert('请选择日期');
+  if(!hours||hours<=0||hours>12) return alert('加班时长应在0.5-12小时之间');
+  if(!reason) return alert('请填写加班原因');
+  const emp=appData.employees[empId];
+  const newApp = {id:Date.now(),empId,empName:emp.name,date,type,hours,reason,status:'pending',createdAt:new Date().toISOString()};
+  otApplications.unshift(newApp);
+  try { await API.post('/api/overtime', newApp); } catch(e) { console.warn('OT submit failed:', e); }
+  document.getElementById('otHours').value=''; document.getElementById('otReason').value='';
+  renderOTList(); alert('✅ 加班申请已提交');
+}
+async function approveOT(id) {
+  const a=otApplications.find(function(x){return x.id===id;});
+  if(a){a.status='approved'; try { await API.post('/api/overtime/'+id+'/approve'); } catch(e) { console.warn(e); } renderOTList();}
+}
+async function rejectOT(id) {
+  const a=otApplications.find(function(x){return x.id===id;});
+  if(a){a.status='rejected'; try { await API.post('/api/overtime/'+id+'/reject'); } catch(e) { console.warn(e); } renderOTList();}
+}
+async function deleteOT(id) {
+  otApplications=otApplications.filter(function(a){return a.id!==id;});
+  try { await API.del('/api/overtime/'+id); } catch(e) { console.warn(e); }
+  renderOTList();
+}
+
+function renderOTList() {
+  const filter=document.getElementById('otFilterStatus').value;
+  let apps=[...otApplications]; if(filter!=='all') apps=apps.filter(a=>a.status===filter);
+  const tm={weekday:'平时加班',weekend:'周末加班',holiday:'节假日加班'};
+  const sm={pending:['待审批','badge-warn'],approved:['已通过','badge-success'],rejected:['已驳回','badge-danger']};
+  if(apps.length===0){document.getElementById('otList').innerHTML='<div class="empty-state"><div class="icon">📭</div><div>暂无加班申请记录</div></div>';return;}
+  document.getElementById('otList').innerHTML=apps.map(a=>{
+    const[st,sb]=sm[a.status];
+    return `<div class="ot-item"><div class="ot-info"><div class="ot-emp">${a.empName} <span style="color:var(--text-secondary);font-weight:400;margin-left:4px;">${a.empId}</span></div><div class="ot-detail">📅 ${a.date} · ${tm[a.type]} · ${a.hours}h · ${a.reason}</div></div><div style="display:flex;align-items:center;gap:10px;"><span class="badge ${sb}">${st}</span>${a.status==='pending'?`<div class="btn-group"><button class="btn btn-success btn-sm" onclick="approveOT(${a.id})">通过</button><button class="btn btn-danger btn-sm" onclick="rejectOT(${a.id})">驳回</button></div>`:`<button class="btn btn-outline btn-sm" onclick="deleteOT(${a.id})">删除</button>`}</div></div>`;
+  }).join('');
+}
+
+// ===================== WATERLINE =====================
+function updateWaterlineSettings() {
+  OT_LIMIT=parseFloat(document.getElementById('wlLimitInput').value)||36;
+  OT_WARN=parseFloat(document.getElementById('wlWarnInput').value)||30;
+  if(OT_WARN>OT_LIMIT) OT_WARN=OT_LIMIT;
+  API.post('/api/settings', {otLimit: OT_LIMIT, otWarn: OT_WARN}).catch(function(e){ console.warn(e); });
+  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN;
+  document.getElementById('waterlineBanner').innerHTML=`⚙️ 当前设置：超标上限 <strong>${OT_LIMIT}h/月</strong>，预警线 <strong>${OT_WARN}h/月</strong>`;
+  document.getElementById('wlSettingsStatus').textContent='✅ 已更新';
+  setTimeout(()=>{document.getElementById('wlSettingsStatus').textContent='';},2000);
+  renderWaterline();
+}
+function renderWaterline() {
+  const month=document.getElementById('wlMonth').value, data=getMonthData(month);
+  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN;
+  document.getElementById('waterlineBanner').innerHTML=`⚙️ 当前设置：超标上限 <strong>${OT_LIMIT}h/月</strong>，预警线 <strong>${OT_WARN}h/月</strong>`;
+  const tt=data.reduce((s,r)=>s+getEffectiveTotal(r,month),0);
+  const ex=data.filter(r=>getEffectiveTotal(r,month)>OT_LIMIT).length;
+  const wn=data.filter(r=>{const th=getEffectiveTotal(r,month);return th>OT_WARN&&th<=OT_LIMIT;}).length;
+  document.getElementById('waterlineStats').innerHTML=`
+    <div class="stat-card danger"><div class="label">🚫 已超标 (>{OT_LIMIT}h)</div><div class="value">${ex}</div></div>
+    <div class="stat-card warn"><div class="label">⚠️ 预警 (${OT_WARN}-${OT_LIMIT}h)</div><div class="value">${wn}</div></div>
+    <div class="stat-card success"><div class="label">✅ 正常 (≤${OT_WARN}h)</div><div class="value">${data.length-ex-wn}</div></div>
+    <div class="stat-card"><div class="label">📊 团队预测总工时</div><div class="value">${tt.toFixed(0)}h</div><div class="sub">${month}</div></div>`;
+  const sorted=[...data].sort((a,b)=>getEffectiveTotal(b,month)-getEffectiveTotal(a,month));
+  document.getElementById('waterlineGrid').innerHTML=sorted.map(r=>{
+    const th=getEffectiveTotal(r,month), pct=Math.min((th/OT_LIMIT)*100,100);
+    let level='safe',statusText='安全';
+    if(th>OT_LIMIT){level='danger';statusText='已超标';}else if(th>OT_WARN){level='warn';statusText='预警中';}
+    return `<div class="waterline-card" style="border-left:4px solid ${level==='danger'?'#e74c3c':level==='warn'?'#f39c12':'#27ae60'};">
+      <div class="emp-name">${r.name} <span class="badge badge-${level==='danger'?'danger':level==='warn'?'warn':'success'}">${statusText}</span></div>
+      <div class="emp-id">${r.emp_id} · ${r.position||'设备技术员'}</div>
+      <div class="meter-bar"><div class="meter-fill ${level}" style="width:${pct}%;"></div></div>
+      <div class="meter-info"><span class="ot-hours">预测总工时 ${th.toFixed(0)}h</span><span class="limit">上限 ${OT_LIMIT}h</span></div>
+      <div style="display:flex;gap:8px;margin-top:8px;font-size:11px;color:var(--text-secondary);">
+        <span>当前：${parseFloat(r.total_hours)||0}h</span><span>预测增量：+${th-(parseFloat(r.total_hours)||0)}h</span></div></div>`;
+  }).join('');
+}
+
+// ===================== SEARCH =====================
+function initSearchQuickList() {
+  const emps=Object.entries(appData.employees).sort((a,b)=>a[1].name.localeCompare(b[1].name,'zh'));
+  document.getElementById('searchQuickList').innerHTML=emps.map(([id,e])=>`<button class="btn btn-outline btn-xs" onclick="quickSearch('${id}')" style="font-size:12px;">${e.name}</button>`).join('');
+}
+function onSearchInput() { const v=document.getElementById('searchInput').value.trim(); if(!v) document.getElementById('searchResult').innerHTML=''; }
+function quickSearch(empId) { document.getElementById('searchInput').value=empId; doSearch(); }
+
+function doSearch() {
+  const val=document.getElementById('searchInput').value.trim();
+  if(!val){document.getElementById('searchResult').innerHTML='';return;}
+  let fid=null;
+  for(const[id,emp] of Object.entries(appData.employees)){if(id.toLowerCase().includes(val.toLowerCase())||emp.name.includes(val)){fid=id;break;}}
+  if(!fid){document.getElementById('searchResult').innerHTML='<div class="empty-state"><div class="icon">🔍</div><div>未找到该员工</div></div>';return;}
+  const emp=appData.employees[fid];
+  const sm=document.getElementById('searchMonth'), month=sm?sm.value:findDefaultMonth();
+  const d=getMonthData(month), rec=d.find(function(r){return r.emp_id===fid;});
+  if(!rec){document.getElementById('searchResult').innerHTML='<div class="empty-state"><div class="icon">📭</div><div>该员工在'+month.replace('2026年','')+'无考勤记录</div></div>';return;}
+
+  var daily=rec.daily||[];
+  var wd=parseFloat(rec.weekday_ot)||0, we=parseFloat(rec.weekend_ot)||0, ho=parseFloat(rec.holiday_ot)||0;
+  var rh=parseFloat(rec.regular_hours)||0, th=parseFloat(rec.total_hours)||0, totOT=wd+we+ho;
+  var pred=predictRemaining(month), effTH=pred?th+pred.total_hours:th;
+  var wlS='正常',wlB='success';
+  if(effTH>OT_LIMIT){wlS='已超标';wlB='danger';}else if(effTH>OT_WARN){wlS='预警中';wlB='warn';}
+
+  var DAYS_PER_ROW=7, dailyRows='';
+  var dayNames=['日','一','二','三','四','五','六'];
+  var m=parseInt(month.replace('2026年','').replace('月',''));
+  var maxDay=new Date(2026,m,0).getDate();
+
+  for(var start=1;start<=maxDay;start+=DAYS_PER_ROW){
+    var end=Math.min(start+DAYS_PER_ROW-1,maxDay);
+    var row='<tr>';
+    for(var dd=start;dd<=end;dd++){
+      var entry=null;
+      for(var k=0;k<daily.length;k++){if(daily[k].day===dd){entry=daily[k];break;}}
+      var normal=entry&&entry._normal!==undefined?entry._normal:0;
+      var ot=entry&&entry._ot!==undefined?entry._ot:0;
+      var total=normal+ot;
+      var dow=new Date(2026,m-1,dd).getDay();
+      var isWE=dow===0||dow===6;
+      var bgStyle=isWE?'background:#fff7ed;':'';
+      var color1='color:var(--text);';
+      var color2=total>8?'color:#e74c3c;':'color:var(--text);';
+      row+='<td style="'+bgStyle+'min-width:90px;padding:8px 6px;vertical-align:top;border:1px solid var(--border);">'+
+        '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px;">'+dd+'日 周'+dayNames[dow]+'</div>'+
+        '<div style="font-size:12px;line-height:1.6;"><span style="'+color1+'">正常 '+normal+'h</span><br>'+
+        '<span style="'+color2+'">加班 '+ot+'h</span><br>'+
+        '<span style="font-weight:600;color:var(--primary);">合计 '+total+'h</span></div>'+
+      '</td>';
+    }
+    row+='</tr>';
+    dailyRows+=row;
+  }
+
+  var html='<div class="search-result-card">'+
+    '<div class="sr-header"><div><span class="sr-name">'+emp.name+'</span>'+
+    '<span style="color:var(--text-secondary);margin-left:12px;">'+fid+'</span>'+
+    '<span style="color:var(--text-secondary);margin-left:8px;">· '+(emp.position||'设备技术员')+'</span></div>'+
+    '<span class="badge badge-'+wlB+'">'+wlS+'</span></div>'+
+    '<div style="padding:16px 20px;">'+
+    '<div class="quick-stats">'+
+    '<div class="quick-stat"><div class="qs-val" style="color:var(--primary);">'+rh+'h</div><div class="qs-label">正常班工时</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:#e74c3c;">'+totOT.toFixed(1)+'h</div><div class="qs-label">加班合计</div></div>'+
+    '<div class="quick-stat"><div class="qs-val">'+th+'h</div><div class="qs-label">总工时</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:#e74c3c;">'+wd+'h</div><div class="qs-label" style="color:#e74c3c;">平时加班</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:#f39c12;">'+we+'h</div><div class="qs-label" style="color:#f39c12;">周末加班</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:#9b59b6;">'+ho+'h</div><div class="qs-label" style="color:#9b59b6;">节假日加班</div></div>'+
+    '</div>'+
+    '<div class="table-wrap" style="overflow-x:auto;"><table style="table-layout:auto;width:100%;"><tbody>'+dailyRows+'</tbody></table></div>'+
+    '</div></div>';
+  document.getElementById('searchResult').innerHTML=html;
+}
+
+// ===================== IMPORT =====================
+function handleFileImport(event) {
+  const file=event.target.files[0]; if(!file) return;
+  const reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      const wb=XLSX.read(e.target.result,{type:'array'}), rd=document.getElementById('importResult');
+      let im=[];
+      for(const sn of wb.SheetNames){
+        if(!sn.match(/2026年\d+月/)) continue;
+        const ws=wb.Sheets[sn], rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:null});
+        if(rows.length<5) continue;
+        const md=[];
+        for(let i=4;i<rows.length;i+=3){
+          const r1=rows[i]||[], r3=rows[i+2]||[];
+          const name=r1[2], empId=r1[1]; if(!name||name==='合计'||name==='值班人'||name==='审核') continue;
+          md.push({emp_id:String(empId||''),name:String(name),weekday_ot:parseFloat(r1[37])||0,weekend_ot:parseFloat(r1[38])||0,holiday_ot:parseFloat(r1[39])||0,regular_hours:parseFloat(r1[36])||0,total_hours:parseFloat(r1[40])||0,position:String(r1[3]||'设备技术员')});
+        }
+        if(md.length>0){
+          if(!appData.attendance[sn]) appData.attendance[sn]=[];
+          for(const imp of md){
+            const ex=appData.attendance[sn].findIndex(r=>r.emp_id===imp.emp_id);
+            if(ex>=0){appData.attendance[sn][ex]={...appData.attendance[sn][ex],weekday_ot:imp.weekday_ot,weekend_ot:imp.weekend_ot,holiday_ot:imp.holiday_ot,regular_hours:imp.regular_hours,total_hours:imp.total_hours};}
+            else{appData.attendance[sn].push({...imp,daily:[]});}
+            if(!appData.employees[imp.emp_id]){appData.employees[imp.emp_id]={name:imp.name,position:imp.position||'设备技术员'};}
+          }
+          im.push(`${sn}(${md.length}人)`);
+        }
+      }
+      if(im.length>0){rd.className='import-result show alert-banner success';rd.innerHTML=`✅ 成功导入：${im.join('、')}`;
+        document.getElementById('teamCount').textContent=Object.keys(appData.employees).length;
+        initMonthSelects();initOTForm();initEditMonth();renderDashboard();renderDataSummary();initSearchQuickList();}
+      else{rd.className='import-result show alert-banner warn';rd.innerHTML='⚠️ 未识别到有效数据';}
+    }catch(err){document.getElementById('importResult').className='import-result show alert-banner danger';document.getElementById('importResult').innerHTML='❌ 解析失败：'+err.message;}
+  };
+  reader.readAsArrayBuffer(file);
+}
+function renderDataSummary() {
+  const months=Object.keys(appData.attendance).sort();
+  document.getElementById('dataSummary').innerHTML=`<div class="table-wrap"><table><thead><tr><th>月份</th><th>人数</th><th>总正常班工时</th><th>总平时加班</th><th>总周末加班</th><th>总节假日加班</th><th>总加班</th></tr></thead><tbody>
+  ${months.map(m=>{const d=getMonthData(m),wd=d.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0),we=d.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0),ho=d.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0),rh=d.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);return `<tr><td><strong>${m.replace('2026年','')}</strong></td><td>${d.length}人</td><td>${rh.toFixed(0)}h</td><td>${wd.toFixed(1)}h</td><td>${we.toFixed(1)}h</td><td>${ho.toFixed(1)}h</td><td><strong>${(wd+we+ho).toFixed(1)}h</strong></td></tr>`;}).join('')}
+  </tbody></table></div>`;
+}
+
+// ===================== EDITABLE TABLE (auto-save) =====================
+function getTodayInMonth(monthStr) {
+  const now=new Date(), m=parseInt(monthStr.replace('2026年','').replace('月',''));
+  if(now.getFullYear()===2026&&now.getMonth()+1===m) return now.getDate();
+  return null;
+}
+function getDayValues(daily, empEdits, day) {
+  const dk=String(day), edit=empEdits[dk];
+  if(edit!==undefined){if(typeof edit==='object'&&edit!==null) return {n:edit.n!==undefined?edit.n:0,o:edit.o!==undefined?edit.o:0};return {n:parseFloat(edit)||0,o:0};}
+  const dd=daily.find(dd=>dd.day===day); if(!dd) return {n:'',o:''};
+  return {n:typeToNormalHours(dd.type),o:hoursToNum(dd.hours)};
+}
+
+let _autoSaveTimer = null;
+function autoSave() {
+  clearTimeout(_autoSaveTimer);
+  _autoSaveTimer = setTimeout(() => {
+    // Save dailyEdits to server (batch)
+    for (const [month, empMap] of Object.entries(dailyEdits)) {
+      for (const [empId, dayMap] of Object.entries(empMap)) {
+        for (const [day, val] of Object.entries(dayMap)) {
+          API.post('/api/attendance/daily-edit', {
+            month: month, empId: empId, day: parseInt(day),
+            normal: val.n, ot: val.o
+          }).catch(function(e){ console.warn(e); });
+        }
+      }
+    }
+    for (const [month, empMap] of Object.entries(dailyEdits)) {
+      const base = appData.attendance[month] || [];
+      if (!editedData[month]) editedData[month] = {};
+      for (const [empId, dayMap] of Object.entries(empMap)) {
+        const record = base.find(r => r.emp_id === empId);
+        const daily = record ? (record.daily || []) : [];
+        const mergedDaily = daily.map(d => {
+          const dk = String(d.day), edit = dayMap[dk];
+          let n = typeToNormalHours(d.type), o = hoursToNum(d.hours);
+          if (edit !== undefined) {
+            if (typeof edit === 'object' && edit !== null) { n = edit.n !== undefined ? edit.n : n; o = edit.o !== undefined ? edit.o : o; }
+            else { n = parseFloat(edit) || 0; o = 0; }
+          }
+          return { ...d, _normal: n, _ot: o };
+        });
+        editedData[month][empId] = computeTotals(mergedDaily, month);
+        // Save to server
+        API.post('/api/attendance/edit', {
+          month: month, empId: empId, data: editedData[month][empId]
+        }).catch(function(e){ console.warn(e); });
+      }
+    }
+    if (document.getElementById('page-dashboard').classList.contains('active')) renderDashboard();
+  }, 300);
+}
+
+function renderEditableTable() {
+  const month = document.getElementById('editMonth').value, data = getMonthData(month), dEdits = dailyEdits[month] || {};
+  const today = getTodayInMonth(month);
+  if (today) document.getElementById('todayLabel').textContent = `${month.replace('2026年','')}${today}日 (${WEEKDAY_NAMES[getDayOfWeek(month, today)]})`;
+  else document.getElementById('todayLabel').textContent = '非当月';
+  data.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh'));
+  const numDays = data.length > 0 ? (data[0].daily || []).length : 31;
+  const weekendDays = new Set(); for (let d = 1; d <= numDays; d++) { if (isWeekend(month, d)) weekendDays.add(d); }
+
+  let headerCells = '<th style="position:sticky;left:0;background:#f8f9fb;z-index:2;min-width:28px;">序</th>';
+  headerCells += '<th style="position:sticky;left:28px;background:#f8f9fb;z-index:2;min-width:62px;">工号</th>';
+  headerCells += '<th style="position:sticky;left:90px;background:#f8f9fb;z-index:2;min-width:52px;">姓名</th>';
+  if (today) headerCells += '<th style="background:#e8f0fe;color:var(--primary);text-align:center;font-size:10px;min-width:36px;">今日<br>一键</th>';
+  for (let d = 1; d <= numDays; d++) {
+    const dow = getDayOfWeek(month, d), isWE = weekendDays.has(d), isToday = d === today;
+    const bg = isToday ? '#e8f0fe' : (isWE ? '#fff3e0' : '');
+    headerCells += `<th style="text-align:center;min-width:42px;font-size:9px;${bg?'background:'+bg+';':''}${isToday?'color:var(--primary);font-weight:700;':''}">${d}<br><span style="color:${isWE?'#e74c3c':isToday?'var(--primary)':'var(--text-secondary)'};">${WEEKDAY_NAMES[dow]}</span><br><span style="font-size:8px;color:#aaa;">正 | 加</span></th>`;
+  }
+  headerCells += '<th style="background:#e8f0fe;font-size:11px;">正常班</th><th style="background:#fde8e8;color:#e74c3c;font-size:11px;">平时<br>加班</th><th style="background:#fef3e2;color:#f39c12;font-size:11px;">周末<br>加班</th><th style="background:#f0e6f6;color:#9b59b6;font-size:11px;">总加班</th><th style="background:#e8f0fe;font-size:11px;">总工时</th><th style="background:#ede0f6;color:#7c3aed;font-size:11px;">🔮预测<br>总工时</th>';
+
+  let rows = data.map((r, i) => {
+    const daily = r.daily || [], empEdits = dEdits[r.emp_id] || {};
+    let cells = `<td style="position:sticky;left:0;background:#fff;z-index:1;font-size:11px;">${i+1}</td>`;
+    cells += '<td style="position:sticky;left:28px;background:#fff;z-index:1;font-size:10px;cursor:pointer;" title="点击修改工号" data-action="editId" data-empid="'+r.emp_id+'">'+r.emp_id+'</td>';
+    var secTag = getSection(r.emp_id) ? ' <span style="font-size:9px;color:var(--primary);">['+getSection(r.emp_id)+']</span>' : '';
+    cells += '<td style="position:sticky;left:90px;background:#fff;z-index:1;white-space:nowrap;font-size:12px;"><strong style="cursor:pointer;" title="点击修改姓名" data-action="editName" data-empid="'+r.emp_id+'">'+r.name+'</strong>'+secTag+' <button class="btn btn-xs" data-action="delete" data-empid="'+r.emp_id+'" data-name="'+r.name+'" style="font-size:9px;padding:0 5px;margin-left:6px;color:#e74c3c;border:1px solid #e74c3c;background:#fff;" title="删除该���工">✕</button></td>';
+    if (today) {
+      const tv = getDayValues(daily, empEdits, today);
+      const isWorking = (typeof tv.n === 'number' && tv.n > 0) || (typeof tv.o === 'number' && tv.o > 0);
+      cells += `<td style="text-align:center;padding:2px;background:#f0f6ff;"><button class="btn btn-xs ${isWorking?'btn-success':'btn-outline'}" onclick="toggleToday('${month}','${r.emp_id}',${today})" style="font-size:9px;padding:2px 4px;white-space:nowrap;">${isWorking?'✅上班':'休息'}</button></td>`;
+    }
+    const mergedDaily = daily.map(dd => { const dv = getDayValues(daily, empEdits, dd.day); const isF = today !== null && dd.day > today; return { ...dd, _normal: isF ? 0 : dv.n, _ot: isF ? 0 : dv.o }; });
+    const totals = computeTotals(mergedDaily, month);
+    for (let d = 1; d <= numDays; d++) {
+      const dv = getDayValues(daily, empEdits, d);
+      const isWE = weekendDays.has(d), isToday = d === today, isFuture = today !== null && d > today;
+      const displayN = isFuture ? 0 : (dv.n === '' ? '' : dv.n), displayO = isFuture ? 0 : (dv.o === '' ? '' : dv.o);
+      let tdStyle = 'text-align:center;padding:1px;';
+      if (isToday) tdStyle += 'background:#f0f6ff;'; else if (isFuture) tdStyle += 'background:#f5f5f5;'; else if (isWE) tdStyle += 'background:#fff8f0;';
+      const inStyle = `width:38px;padding:1px 2px;font-size:10px;text-align:center;border:1px solid #e0e0e0;border-radius:2px;${isToday?'border-color:var(--primary);':''}${isFuture?'background:#eee;color:#bbb;':''}`;
+      cells += `<td style="${tdStyle}"><input type="number" step="0.5" min="0" max="24" value="${displayN}" ${isFuture?'disabled':`onchange="onDayEdit('${month}','${r.emp_id}',${d},'n',this.value)"`} style="${inStyle}color:#2c3e50;"><br><input type="number" step="0.5" min="0" max="24" value="${displayO}" ${isFuture?'disabled':`onchange="onDayEdit('${month}','${r.emp_id}',${d},'o',this.value)"`} style="${inStyle}color:#e74c3c;"></td>`;
+    }
+    const totalOT = totals.weekday_ot + totals.weekend_ot + totals.holiday_ot;
+    cells += `<td style="text-align:center;font-weight:500;background:#f0f6ff;">${totals.regular_hours}</td>`;
+    cells += `<td style="text-align:center;font-weight:500;color:#e74c3c;background:#fff5f5;">${totals.weekday_ot}</td>`;
+    cells += `<td style="text-align:center;font-weight:500;color:#f39c12;background:#fffdf5;">${totals.weekend_ot}</td>`;
+    cells += `<td style="text-align:center;font-weight:500;color:#9b59b6;background:#fdf5ff;">${totalOT}</td>`;
+    cells += `<td style="text-align:center;font-weight:700;background:#f0f6ff;">${totals.total_hours}</td>`;
+    const pred = predictRemaining(month);
+    cells += `<td style="text-align:center;font-weight:700;color:#7c3aed;background:#f8f0ff;">${pred ? (totals.total_hours + pred.total_hours).toFixed(0) : '-'}</td>`;
+    return `<tr>${cells}</tr>`;
+  }).join('');
+
+  document.getElementById('editTableWrap').innerHTML = '<table style="font-size:11px;"><thead><tr>'+headerCells+'</tr></thead><tbody>'+rows+'</tbody></table>';
+  // Use event delegation for clicks
+  var wrap = document.getElementById('editTableWrap');
+  wrap.onclick = function(e) {
+    var target = e.target;
+    while (target && target !== wrap) {
+      var action = target.getAttribute('data-action');
+      if (action === 'delete') {
+        deleteEmp(target.getAttribute('data-empid'), target.getAttribute('data-name'));
+        return;
+      }
+      if (action === 'editId') {
+        editEmpId(target.getAttribute('data-empid'));
+        return;
+      }
+      if (action === 'editName') {
+        var eid = target.getAttribute('data-empid');
+        editEmpName(eid, appData.employees[eid] ? appData.employees[eid].name : '');
+        return;
+      }
+      target = target.parentElement;
+    }
+  };
+}
+
+function onDayEdit(month, empId, day, field, value) {
+  if (!dailyEdits[month]) dailyEdits[month] = {};
+  if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
+  const dk = String(day);
+  let cur = dailyEdits[month][empId][dk];
+  if (cur === undefined || typeof cur !== 'object' || cur === null) cur = { n: (typeof cur === 'number' ? cur : 0), o: 0 };
+  cur[field] = value === '' ? 0 : (parseFloat(value) || 0);
+  dailyEdits[month][empId][dk] = cur;
+  renderEditableTable();
+  autoSave();
+}
+
+function toggleToday(month, empId, today) {
+  if (!dailyEdits[month]) dailyEdits[month] = {};
+  if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
+  const dk = String(today), cur = dailyEdits[month][empId][dk];
+  dailyEdits[month][empId][dk] = (cur && typeof cur === 'object' && cur.n > 0) ? { n: 0, o: 0 } : { n: 8, o: 0 };
+  renderEditableTable();
+  autoSave();
+}
+
+function batchFillToday(hours) {
+  const month = document.getElementById('editMonth').value, today = getTodayInMonth(month);
+  if (!today) { alert('当前选择的不是本月'); return; }
+  const data = getMonthData(month);
+  if (!dailyEdits[month]) dailyEdits[month] = {};
+  for (const r of data) { if (!dailyEdits[month][r.emp_id]) dailyEdits[month][r.emp_id] = {}; dailyEdits[month][r.emp_id][String(today)] = { n: hours, o: 0 }; }
+  renderEditableTable(); autoSave();
+  document.getElementById('editStatus').textContent = hours > 0 ? `✅ 已录入` : `❌ 已清空`;
+  setTimeout(() => { document.getElementById('editStatus').textContent = ''; }, 1500);
+}
+
+function addEmployee() {
+  var name = document.getElementById('newEmpName').value.trim();
+  var empId = document.getElementById('newEmpId').value.trim();
+  var position = document.getElementById('newEmpPos').value;
+  var section = document.getElementById('newEmpSection').value;
+  if (!name) { document.getElementById('addEmpStatus').textContent = '请输入姓名'; return; }
+  if (!empId) { document.getElementById('addEmpStatus').textContent = '请输入工号'; return; }
+  if (appData.employees[empId]) { document.getElementById('addEmpStatus').textContent = '该工号已存在'; return; }
+
+  appData.employees[empId] = { name: name, position: position };
+  // Generate empty daily records for the new employee
+  var emptyDailyForAll = [];
+  for (var d = 1; d <= 31; d++) {
+    emptyDailyForAll.push({ day: d, type: '/', type2: '/', hours: '/' });
+  }
+  // Add to all months they're not already in
+  for (var mi = 1; mi <= 12; mi++) {
+    var mKey = '2026年'+mi+'月';
+    var numDays = new Date(2026, mi, 0).getDate();
+    var daily = emptyDailyForAll.slice(0, numDays);
+    if (appData.attendance[mKey]) {
+      // Existing month: check if already added
+      var found = false;
+      for (var ri = 0; ri < appData.attendance[mKey].length; ri++) {
+        if (appData.attendance[mKey][ri].emp_id === empId) { found = true; break; }
+      }
+      if (!found) {
+        appData.attendance[mKey].push({
+          emp_id: empId, name: name, position: position, daily: daily,
+          regular_hours: 0, weekday_ot: 0, weekend_ot: 0, holiday_ot: 0, total_hours: 0
+        });
+      }
+    } else {
+      // New month: first auto-create all employees via getMonthData, then no need to push separately
+      getMonthData(mKey);
+    }
+  }
+  API.post('/api/employees', { empId: empId, name: name, position: position }).catch(function(e){ console.warn(e); });
+  if (section) {
+    sectionAssignments[empId] = section;
+    API.post('/api/sections', { assignments: sectionAssignments }).catch(function(e){ console.warn(e); });
+  }
+
+  document.getElementById('newEmpName').value = '';
+  document.getElementById('newEmpId').value = '';
+  document.getElementById('addEmpStatus').textContent = '已添加 '+name;
+  document.getElementById('addEmpStatus').style.color = 'var(--success)';
+  setTimeout(function(){ document.getElementById('addEmpStatus').textContent = ''; }, 2000);
+  document.getElementById('teamCount').textContent = Object.keys(appData.employees).length;
+  initOTForm(); initSearchQuickList(); refreshSectionSelect(); renderEditableTable();
+  renderDashboard();
+}
+
+function refreshSectionSelect() {
+  var sel = document.getElementById('sectionEmpSelect');
+  if (!sel) return;
+  var emps = Object.entries(appData.employees).sort(function(a,b){ return a[1].name.localeCompare(b[1].name, 'zh'); });
+  sel.innerHTML = emps.map(function(e){ return '<option value="'+e[0]+'">'+e[1].name+' ['+getSection(e[0])+']</option>'; }).join('');
+  // Auto-select first
+  if (emps.length > 0) {
+    var firstId = emps[0][0];
+    document.getElementById('sectionSelect').value = getSection(firstId);
+  }
+}
+document.getElementById('sectionEmpSelect') && document.getElementById('sectionEmpSelect').addEventListener('change', function(){
+  document.getElementById('sectionSelect').value = getSection(this.value);
+});
+
+function setSection() {
+  var empId = document.getElementById('sectionEmpSelect').value;
+  var section = document.getElementById('sectionSelect').value;
+  if (!empId) return;
+  sectionAssignments[empId] = section;
+  API.post('/api/sections', { assignments: sectionAssignments }).catch(function(e){ console.warn(e); });
+  document.getElementById('sectionStatus').textContent = '已设置 ' + (section||'未设置');
+  document.getElementById('sectionStatus').style.color = 'var(--success)';
+  setTimeout(function(){ document.getElementById('sectionStatus').textContent = ''; }, 2000);
+  refreshSectionSelect(); renderEditableTable(); renderSchedule();
+}
+
+function editEmpName(empId, oldName) {
+  var newName = prompt('修改姓名：', oldName);
+  if (!newName || newName === oldName) return;
+  appData.employees[empId].name = newName;
+  // Update name in all months
+  for (var month in appData.attendance) {
+    var data = appData.attendance[month];
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].emp_id === empId) { data[i].name = newName; break; }
+    }
+  }
+  API.put('/api/employees/'+empId, { name: newName, position: (appData.employees[empId]||{}).position }).catch(function(e){ console.warn(e); });
+  renderEditableTable(); refreshSectionSelect(); document.getElementById('editStatus').textContent = '已改名';
+  setTimeout(function(){ document.getElementById('editStatus').textContent = ''; }, 2000);
+}
+
+function editEmpId(empId) {
+  var newId = prompt('修改工号：', empId);
+  if (!newId || newId === empId) return;
+  if (appData.employees[newId]) { alert('该工号已存在'); return; }
+  var oldData = appData.employees[empId];
+  appData.employees[newId] = { name: oldData.name, position: oldData.position };
+  delete appData.employees[empId];
+  if (sectionAssignments[empId]) { sectionAssignments[newId] = sectionAssignments[empId]; delete sectionAssignments[empId]; }
+  // Update all months
+  for (var month in appData.attendance) {
+    var data = appData.attendance[month];
+    for (var i = 0; i < data.length; i++) {
+      if (data[i].emp_id === empId) { data[i].emp_id = newId; break; }
+    }
+  }
+  // Update editedData and dailyEdits
+  for (var m in editedData) { if (editedData[m][empId]) { editedData[m][newId] = editedData[m][empId]; delete editedData[m][empId]; } }
+  for (var m in dailyEdits) { if (dailyEdits[m] && dailyEdits[m][empId]) { dailyEdits[m][newId] = dailyEdits[m][empId]; delete dailyEdits[m][empId]; } }
+  API.post('/api/employees', { empId: newId, name: oldData.name, position: oldData.position }).catch(function(e){ console.warn(e); });
+  API.del('/api/employees/'+empId).catch(function(e){ console.warn(e); });
+  renderEditableTable(); refreshSectionSelect(); document.getElementById('editStatus').textContent = '工号已更改';
+  setTimeout(function(){ document.getElementById('editStatus').textContent = ''; }, 2000);
+}
+
+function deleteEmp(empId, name) {
+  if (!confirm('确定删除 '+name+'（'+empId+'）的所有记录吗？此操作不可恢复。')) return;
+  delete appData.employees[empId];
+  delete sectionAssignments[empId];
+  for (var month in appData.attendance) {
+    appData.attendance[month] = appData.attendance[month].filter(function(r){ return r.emp_id !== empId; });
+  }
+  for (var m in editedData) { delete editedData[m][empId]; }
+  for (var m in dailyEdits) { if (dailyEdits[m]) delete dailyEdits[m][empId]; }
+  API.del('/api/employees/'+empId).catch(function(e){ console.warn(e); });
+  document.getElementById('teamCount').textContent = Object.keys(appData.employees).length;
+  renderEditableTable(); refreshSectionSelect(); initOTForm();
+  document.getElementById('editStatus').textContent = '已删除 '+name;
+  setTimeout(function(){ document.getElementById('editStatus').textContent = ''; }, 2000);
+}
+
+function resetEdits() {
+  if (!confirm('确定要撤销该月份所有修改吗？')) return;
+  const month = document.getElementById('editMonth').value;
+  delete dailyEdits[month]; delete editedData[month];
+  autoSave(); renderEditableTable();
+  document.getElementById('editStatus').textContent = '↩ 已撤销';
+  setTimeout(() => { document.getElementById('editStatus').textContent = ''; }, 2000);
+}
+
+// Drag & drop
+document.addEventListener('DOMContentLoaded', () => {
+  const zone = document.getElementById('importZone');
+  if (zone) {
+    zone.addEventListener('dragover', (e) => { e.preventDefault(); zone.style.borderColor = 'var(--primary)'; zone.style.background = '#f0f4ff'; });
+    zone.addEventListener('dragleave', () => { zone.style.borderColor = '#d0d5dd'; zone.style.background = '#fafbfc'; });
+    zone.addEventListener('drop', (e) => {
+      e.preventDefault(); zone.style.borderColor = '#d0d5dd'; zone.style.background = '#fafbfc';
+      const file = e.dataTransfer.files[0];
+      if (file) { const dt = new DataTransfer(); dt.items.add(file); document.getElementById('fileInput').files = dt.files; handleFileImport({ target: { files: dt.files } }); }
+    });
+  }
+});
+
+// ===================== SCHEDULE =====================
+var WEEKLY_LIMIT = 61;
+
+function initScheduleMonth() {
+  var sel = document.getElementById('scheduleMonth');
+  if (!sel) return;
+  var curYear = new Date().getFullYear();
+  var allMonths = [];
+  for (var mi = 1; mi <= 12; mi++) allMonths.push(curYear+'年'+mi+'月');
+  var dm = findDefaultMonth();
+  sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
+  sel.value = dm;
+  renderSchedule();
+}
+
+// ISO 8601 week number (week starts Monday, week 1 = first week with Thursday)
+function getISOWeek(year, month, day) {
+  var d = new Date(year, month-1, day);
+  d.setHours(0, 0, 0, 0);
+  d.setDate(d.getDate() + 3 - (d.getDay() + 6) % 7);
+  var week1 = new Date(d.getFullYear(), 0, 4);
+  return 1 + Math.round(((d - week1) / 86400000 - 3 + (week1.getDay() + 6) % 7) / 7);
+}
+
+// Get Monday-Sunday date range for a given ISO week
+function getWeekRange(weekNum) {
+  var jan4 = new Date(2026, 0, 4);
+  var jan4Week = getISOWeek(2026, 1, 4);
+  var weekDiff = weekNum - jan4Week;
+  var monday = new Date(jan4);
+  monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + weekDiff * 7);
+  var sunday = new Date(monday);
+  sunday.setDate(monday.getDate() + 6);
+  return (monday.getMonth()+1)+'月'+monday.getDate()+'日-'+(sunday.getMonth()+1)+'月'+sunday.getDate()+'日';
+}
+
+function renderSchedule() {
+  var month = document.getElementById('scheduleMonth').value;
+  if (!month) return;
+  var data = getMonthData(month);
+  var m = parseInt(month.replace('2026年','').replace('月',''));
+  var maxDay = new Date(2026, m, 0).getDate();
+  var DAY_NAMES = ['一','二','三','四','五','六','日'];
+  var today = new Date();
+  var todayStr = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
+
+  // Calculate forced rest: if week > 61h, distribute rest across next week Mon-Sat, max 3/day
+  var forcedRest = {};
+  var dayRestCount = {}; // day -> count of people resting
+  // First pass: collect all employees that need rest, sorted by exceeded amount (most first)
+  var restQueue = [];
+  for (var ri = 0; ri < data.length; ri++) {
+    var rec = data[ri];
+    var weekHours = {};
+    var daily = rec.daily || [];
+    for (var di = 0; di < daily.length; di++) {
+      var d = daily[di];
+      var w = getISOWeek(2026, m, d.day);
+      if (!weekHours[w]) weekHours[w] = 0;
+      weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._ot !== undefined ? d._ot : 0);
+    }
+    var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
+    for (var wi = 0; wi < weekKeys.length; wi++) {
+      var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
+      if (wkTotal > WEEKLY_LIMIT) {
+        restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
+      }
+    }
+  }
+  // Sort by exceeded amount descending (most overtime gets priority)
+  restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
+
+  // Distribute rest days: assign each person to the next available Mon-Sat (max 3/day)
+  var MAX_REST_PER_DAY = 3;
+  for (var qi = 0; qi < restQueue.length; qi++) {
+    var item = restQueue[qi];
+    if (!forcedRest[item.empId]) forcedRest[item.empId] = [];
+
+    // Find all eligible Mon-Sat days in next ISO week
+    var candidates = [];
+    for (var dd = 1; dd <= maxDay; dd++) {
+      if (getISOWeek(2026, m, dd) === item.week + 1) {
+        var dateCheck = new Date(2026, m-1, dd);
+        var dowCheck = dateCheck.getDay();
+        if (dowCheck !== 0) { // Mon-Sat only
+          candidates.push(dd);
+        }
+      }
+      if (getISOWeek(2026, m, dd) > item.week + 1) break;
+    }
+
+    // Pick the first candidate day with < MAX_REST_PER_DAY rest assignments
+    var assigned = false;
+    for (var ci = 0; ci < candidates.length; ci++) {
+      var cd = candidates[ci];
+      var count = dayRestCount[cd] || 0;
+      if (count < MAX_REST_PER_DAY) {
+        dayRestCount[cd] = count + 1;
+        forcedRest[item.empId].push({ week: item.week, restDay: cd, exceeded: item.exceeded });
+        assigned = true;
+        break;
+      }
+    }
+    // If all candidates are full, pick the one with the least count
+    if (!assigned && candidates.length > 0) {
+      var bestDay = candidates[0], bestCount = dayRestCount[candidates[0]] || 0;
+      for (var ci = 1; ci < candidates.length; ci++) {
+        var cc = dayRestCount[candidates[ci]] || 0;
+        if (cc < bestCount) { bestCount = cc; bestDay = candidates[ci]; }
+      }
+      dayRestCount[bestDay] = (dayRestCount[bestDay] || 0) + 1;
+      forcedRest[item.empId].push({ week: item.week, restDay: bestDay, exceeded: item.exceeded });
+    }
+  }
+
+  // ===== Group rest summary by week + 工段 =====
+  var html = '';
+  var restByWeek = {}; // week -> { section -> [{empId, name, exceeded}] }
+  for (var eid in forcedRest) {
+    var emp = appData.employees[eid];
+    if (!emp) continue;
+    var section = getSection(eid) || '未分组';
+    var restList = forcedRest[eid];
+    for (var rk = 0; rk < restList.length; rk++) {
+      var r = restList[rk];
+      if (!restByWeek[r.week]) restByWeek[r.week] = {};
+      if (!restByWeek[r.week][section]) restByWeek[r.week][section] = [];
+      restByWeek[r.week][section].push(emp.name);
+    }
+  }
+
+  var weekNums = Object.keys(restByWeek).map(Number).sort(function(a,b){return a-b;});
+  if (weekNums.length === 0) {
+    html += '<div class="table-card"><div style="text-align:center;padding:40px;color:var(--text-secondary);">✅ 所有员工周工时均在 '+WEEKLY_LIMIT+'h 以内，无需调休</div></div>';
+  } else {
+    html += '<div class="table-card"><h3>📋 调休汇总 — '+month.replace('2026年','')+'</h3><div style="padding:16px;">';
+    for (var wi = 0; wi < weekNums.length; wi++) {
+      var wk = weekNums[wi];
+      var sections = restByWeek[wk];
+      html += '<div style="margin-bottom:16px;padding:12px 16px;background:#fff;border-radius:8px;border:1px solid var(--border);">';
+      html += '<div style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;">W'+wk+'（'+getWeekRange(wk)+'）</div>';
+      var secKeys = Object.keys(sections).sort();
+      for (var si = 0; si < secKeys.length; si++) {
+        var sec = secKeys[si];
+        var names = sections[sec];
+        html += '<div style="display:flex;align-items:flex-start;margin-bottom:6px;padding:8px 12px;background:#f8f9fb;border-radius:6px;">';
+        html += '<span style="font-weight:600;color:#e74c3c;min-width:110px;">'+sec+'需调休：</span>';
+        html += '<span style="color:var(--text);">'+names.join('、')+'（'+names.length+'人）</span>';
+        html += '</div>';
+      }
+      html += '</div>';
+    }
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h 标记需调休</div>';
+    html += '</div></div>';
+  }
+
+  document.getElementById('scheduleContent').innerHTML = html;
+}
+
+</script>
+</body>
+</html>
