@@ -1396,6 +1396,9 @@ function renderSchedule() {
     var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
     for (var wi = 0; wi < weekKeys.length; wi++) {
       var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
+      // Skip first week of the month — month starts from 0
+      var firstWeekOfMonth = getISOWeek(2026, m, 1);
+      if (wkNum === firstWeekOfMonth) continue;
       if (wkTotal > WEEKLY_LIMIT) {
         restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
       }
