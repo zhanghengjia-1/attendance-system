@@ -19,15 +19,19 @@ function monthStr(date) {
 }
 
 function computeNormal(recType) {
-  if (recType === '/' || recType === '休' || !recType) return 0;
-  const code = parseInt(recType);
-  if (code === 4 || code === 5 || String(recType) === '班') return 8;
-  return 0;
+  // 与前端 typeToNormalHours 完全一致
+  if (recType === null || recType === undefined || recType === '/' || recType === '') return 0;
+  const s = String(recType).trim();
+  if (s === '休' || s === '假') return 0;
+  if (s === '4') return 8;
+  const n = parseFloat(s);
+  return isNaN(n) ? 0 : n;
 }
 
 function computeOT(hours) {
-  const h = parseFloat(hours);
-  return isNaN(h) ? 0 : h;
+  // 与前端 hoursToNum 完全一致
+  if (hours === null || hours === undefined || hours === '/' || hours === '') return 0;
+  return parseFloat(hours) || 0;
 }
 
 function pad(s, width) {
