@@ -246,10 +246,11 @@ tr:hover { background: #f8f9fb; }
       <div class="filter-bar">
         <span style="font-weight:500;">📊 视图：</span>
         <select id="dashboardPeriod" onchange="renderDashboard()" style="padding:4px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
-          <option value="month">月度</option>
+          <option value="month">月</option>
           <option value="week">周</option>
-          <option value="day">天</option>
+          <option value="day">日</option>
           <option value="quarter">季度</option>
+          <option value="year">年</option>
         </select>
       </div>
       <div class="stats-row" id="statsCards"></div>
@@ -744,20 +745,76 @@ function showChartFallback(canvasId, title, err) {
 function renderDashboard() {
   const period = document.getElementById('dashboardPeriod').value;
   const dm = findDefaultMonth(), data = getMonthData(dm);
-  const tr = data.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
-  const twd = data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
-  const twe = data.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
-  const tho = data.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
-  const tot = twd+twe+tho, avg = data.length>0?(tot/data.length).toFixed(1):0;
+  const allMonths = Object.keys(appData.attendance).sort();
+
+  // Compute aggregates based on period
+  var tr = 0, twd = 0, twe = 0, tho = 0, periodPersonCount = data.length;
+  var periodLabel = '';
+  if (period === 'month') {
+    periodLabel = dm;
+    tr = data.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
+    twd = data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
+    twe = data.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
+    tho = data.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
+  } else if (period === 'year') {
+    periodLabel = '2026年';
+    for (var yi = 0; yi < allMonths.length; yi++) {
+      var yd = getMonthData(allMonths[yi]);
+      tr += yd.reduce(function(s,r){ return s+(parseFloat(r.regular_hours)||0); }, 0);
+      twd += yd.reduce(function(s,r){ return s+(parseFloat(r.weekday_ot)||0); }, 0);
+      twe += yd.reduce(function(s,r){ return s+(parseFloat(r.weekend_ot)||0); }, 0);
+      tho += yd.reduce(function(s,r){ return s+(parseFloat(r.holiday_ot)||0); }, 0);
+    }
+  } else if (period === 'quarter') {
+    var cm = parseInt(dm.replace('2026年','').replace('月',''));
+    var cq = Math.ceil(cm / 3);
+    periodLabel = '2026年Q'+cq;
+    for (var qi = 0; qi < allMonths.length; qi++) {
+      var qm = parseInt(allMonths[qi].replace('2026年','').replace('月',''));
+      if (Math.ceil(qm/3) === cq) {
+        var qd2 = getMonthData(allMonths[qi]);
+        tr += qd2.reduce(function(s,r){ return s+(parseFloat(r.regular_hours)||0); }, 0);
+        twd += qd2.reduce(function(s,r){ return s+(parseFloat(r.weekday_ot)||0); }, 0);
+        twe += qd2.reduce(function(s,r){ return s+(parseFloat(r.weekend_ot)||0); }, 0);
+        tho += qd2.reduce(function(s,r){ return s+(parseFloat(r.holiday_ot)||0); }, 0);
+      }
+    }
+  } else if (period === 'week') {
+    periodLabel = dm;
+    for (var we = 0; we < data.length; we++) {
+      var rec = data[we];
+      var daily = rec.daily || [];
+      for (var dei = 0; dei < daily.length; dei++) {
+        var d = daily[dei];
+        var n = d._normal || 0, l = d._lianban || 0, o = d._ot || 0;
+        if (isWeekend(dm, d.day)) { twe += n + l + o; }
+        else { tr += Math.min(n, 8); twd += Math.max(0, n-8) + l + o; }
+      }
+    }
+  } else if (period === 'day') {
+    periodLabel = new Date().getFullYear()+'年'+(new Date().getMonth()+1)+'月'+new Date().getDate()+'日';
+    var mIdx = parseInt(dm.replace('2026年','').replace('月',''));
+    if (new Date().getMonth()+1 === mIdx) {
+      var today = new Date().getDate();
+      for (var dei2 = 0; dei2 < data.length; dei2++) {
+        var dd2 = data[dei2].daily ? data[dei2].daily.find(function(x){ return x.day === today; }) : null;
+        if (!dd2) continue;
+        var n2 = dd2._normal || 0, l2 = dd2._lianban || 0, o2 = dd2._ot || 0;
+        if (isWeekend(dm, today)) { twe += n2 + l2 + o2; }
+        else { tr += Math.min(n2, 8); twd += Math.max(0, n2-8) + l2 + o2; }
+      }
+    }
+  }
+
+  const tot = twd+twe+tho;
+  const totalHours = tr + tot;
+  const avg = periodPersonCount>0 ? (tot/periodPersonCount).toFixed(1) : 0;
   const ex = data.filter(r=>getEffectiveTotal(r,dm)>OT_WARN).length;
-  const pred = predictRemaining(dm);
-  const predHTML = pred ? `<div class="stat-card" style="border-left-color:#9b59b6;"><div class="label">🔮 本月预测增量</div><div class="value">${pred.total_hours}h</div><div class="sub">剩余${pred.remainingDays}个工作日 · 人均+${(pred.total_hours/(data.length||1)).toFixed(1)}h</div></div>` : '';
   document.getElementById('statsCards').innerHTML = `
-    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${data.length}</div><div class="sub">${dm} · 设备技术员</div></div>
-    <div class="stat-card warn"><div class="label">⏰ 本月总加班</div><div class="value">${tot.toFixed(1)}h</div><div class="sub">人均 ${avg}h/人</div></div>
+    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${data.length}</div><div class="sub">${periodLabel} · 设备技术员</div></div>
+    <div class="stat-card warn"><div class="label">⏰ 总加班</div><div class="value">${tot.toFixed(1)}h</div><div class="sub">人均 ${avg}h/人</div></div>
     <div class="stat-card ${ex>0?'danger':'success'}"><div class="label">⚠️ 超预警线人数</div><div class="value">${ex}</div><div class="sub">预警线：${OT_WARN}h/月</div></div>
-    <div class="stat-card"><div class="label">📋 正常班总工时</div><div class="value">${tr.toFixed(0)}h</div><div class="sub">总加班：${tot.toFixed(0)}h</div></div>
-    ${predHTML}`;
+    <div class="stat-card success"><div class="label">📊 总工时</div><div class="value">${totalHours.toFixed(0)}h</div><div class="sub">正常班 ${tr.toFixed(0)}h + 加班 ${tot.toFixed(0)}h</div></div>`;
   try { renderTrendChart(period); } catch(e) { console.warn('趋势图渲染失败:',e); showChartFallback('trendChart',document.getElementById('trendChartTitle').textContent,e); }
   try { renderOTTypeChart(data); } catch(e) { console.warn('类型分布图渲染失败:',e); showChartFallback('otTypeChart','加班类型分布',e); }
   try { renderRankTable(); } catch(e) { console.warn('排行表渲染失败:',e); document.getElementById('rankTable').innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary);">数据加载失败，请刷新页面重试</td></tr>'; }
@@ -837,9 +894,16 @@ function renderTrendChart(period) {
       hourlyWe.push(Math.round(dayWe * 10) / 10);
     }
     regData = hourlyReg; wdData = hourlyWd; weData = hourlyWe; hoData = [];
-  } else {
-    // 月度 (default)
+  } else if (period === 'month') {
     title = '📈 月度趋势';
+    labels = allMonths.map(function(m){ return m.replace('2026年','').replace('月',''); });
+    regData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.regular_hours)||0); }, 0); });
+    wdData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.weekday_ot)||0); }, 0); });
+    weData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.weekend_ot)||0); }, 0); });
+    hoData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.holiday_ot)||0); }, 0); });
+  } else {
+    // year
+    title = '📈 年度趋势';
     labels = allMonths.map(function(m){ return m.replace('2026年','').replace('月',''); });
     regData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.regular_hours)||0); }, 0); });
     wdData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.weekday_ot)||0); }, 0); });
