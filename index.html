@@ -1447,9 +1447,9 @@ function renderSchedule() {
     }
   }
 
-  // ===== Group rest summary by exceeded week + 工段, show rest date =====
+  // ===== Group rest summary by REST week + 工段 =====
   var html = '';
-  var restByWeek = {}; // week -> { section -> [{name, restDay}] }
+  var restByWeek = {}; // restWeek -> { section -> [{name, restDay, exceededWeek}] }
   for (var eid in forcedRest) {
     var emp = appData.employees[eid];
     if (!emp) continue;
@@ -1457,9 +1457,10 @@ function renderSchedule() {
     var restList = forcedRest[eid];
     for (var rk = 0; rk < restList.length; rk++) {
       var r = restList[rk];
-      if (!restByWeek[r.week]) restByWeek[r.week] = {};
-      if (!restByWeek[r.week][section]) restByWeek[r.week][section] = [];
-      restByWeek[r.week][section].push({name: emp.name, restDay: r.restDay});
+      var restWk = getISOWeek(2026, m, r.restDay);
+      if (!restByWeek[restWk]) restByWeek[restWk] = {};
+      if (!restByWeek[restWk][section]) restByWeek[restWk][section] = [];
+      restByWeek[restWk][section].push({name: emp.name, restDay: r.restDay, exceededWeek: r.week});
     }
   }
 
@@ -1486,7 +1487,7 @@ function renderSchedule() {
         }
         var restDayKeys = Object.keys(restDayMap).map(Number).sort(function(a,b){return a-b;});
         html += '<div style="display:flex;align-items:flex-start;margin-bottom:6px;padding:8px 12px;background:#f8f9fb;border-radius:6px;">';
-        html += '<span style="font-weight:600;color:#e74c3c;min-width:110px;">'+sec+'需调休：</span>';
+        html += '<span style="font-weight:600;color:#e74c3c;min-width:110px;">'+sec+'：</span>';
         html += '<span style="color:var(--text);">';
         var first = true;
         for (var ri = 0; ri < restDayKeys.length; ri++) {
