@@ -1343,7 +1343,7 @@ function initScheduleMonth() {
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
       var hint = document.getElementById('scheduleRuleHint');
-  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多 3 人';
+  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多 2 人';
   renderSchedule();
 }
 
@@ -1405,7 +1405,7 @@ function renderSchedule() {
   restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
 
   // Distribute rest days: assign each person to the next available Mon-Sat (max 3/day)
-  var MAX_REST_PER_DAY = 3;
+  var MAX_REST_PER_DAY = 2;
   for (var qi = 0; qi < restQueue.length; qi++) {
     var item = restQueue[qi];
     if (!forcedRest[item.empId]) forcedRest[item.empId] = [];
