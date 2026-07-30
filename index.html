@@ -243,9 +243,18 @@ tr:hover { background: #f8f9fb; }
   <div class="main">
     <!-- ===== 考勤看板 ===== -->
     <div class="page active" id="page-dashboard">
+      <div class="filter-bar">
+        <span style="font-weight:500;">📊 视图：</span>
+        <select id="dashboardPeriod" onchange="renderDashboard()" style="padding:4px 10px;border:1px solid var(--border);border-radius:4px;font-size:13px;">
+          <option value="month">月度</option>
+          <option value="week">周</option>
+          <option value="day">天</option>
+          <option value="quarter">季度</option>
+        </select>
+      </div>
       <div class="stats-row" id="statsCards"></div>
       <div class="chart-grid">
-        <div class="chart-card"><h3>📈 月度加班趋势</h3><canvas id="trendChart"></canvas></div>
+        <div class="chart-card"><h3 id="trendChartTitle">📈 月度加班趋势</h3><canvas id="trendChart"></canvas></div>
         <div class="chart-card"><h3>📊 加班类型分布</h3><canvas id="otTypeChart"></canvas></div>
       </div>
       <div class="table-card">
@@ -733,6 +742,7 @@ function showChartFallback(canvasId, title, err) {
 }
 
 function renderDashboard() {
+  const period = document.getElementById('dashboardPeriod').value;
   const dm = findDefaultMonth(), data = getMonthData(dm);
   const tr = data.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
   const twd = data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
@@ -748,24 +758,112 @@ function renderDashboard() {
     <div class="stat-card ${ex>0?'danger':'success'}"><div class="label">⚠️ 超预警线人数</div><div class="value">${ex}</div><div class="sub">预警线：${OT_WARN}h/月</div></div>
     <div class="stat-card"><div class="label">📋 正常班总工时</div><div class="value">${tr.toFixed(0)}h</div><div class="sub">总加班：${tot.toFixed(0)}h</div></div>
     ${predHTML}`;
-  try { renderTrendChart(Object.keys(appData.attendance)); } catch(e) { console.warn('趋势图渲染失败:',e); showChartFallback('trendChart','月度加班趋势',e); }
+  try { renderTrendChart(period); } catch(e) { console.warn('趋势图渲染失败:',e); showChartFallback('trendChart',document.getElementById('trendChartTitle').textContent,e); }
   try { renderOTTypeChart(data); } catch(e) { console.warn('类型分布图渲染失败:',e); showChartFallback('otTypeChart','加班类型分布',e); }
   try { renderRankTable(); } catch(e) { console.warn('排行表渲染失败:',e); document.getElementById('rankTable').innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary);">数据加载失败，请刷新页面重试</td></tr>'; }
 }
 
-function renderTrendChart(months) {
+function renderTrendChart(period) {
   const ctx = document.getElementById('trendChart').getContext('2d');
   if (trendChart) trendChart.destroy();
   if (typeof Chart === 'undefined') throw new Error('Chart.js 未加载');
-  const labels = months.map(m=>m.replace('2026年','').replace('月',''));
-  const wd=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0));
-  const we=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0));
-  const ho=months.map(m=>getMonthData(m).reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0));
-  trendChart=new Chart(ctx,{type:'bar',data:{labels,datasets:[
-    {label:'平时加班',data:wd,backgroundColor:'#e74c3c',borderRadius:4},
-    {label:'周末加班',data:we,backgroundColor:'#f39c12',borderRadius:4},
-    {label:'节假日加班',data:ho,backgroundColor:'#9b59b6',borderRadius:4}
-  ]},options:{responsive:true,maintainAspectRatio:false,plugins:{legend:{position:'bottom',labels:{usePointStyle:true,padding:20}}},scales:{x:{stacked:true,grid:{display:false}},y:{stacked:true,title:{display:true,text:'小时 (h)'},grid:{color:'#f0f0f0'}}}}});
+  var title = '', labels = [], regData = [], wdData = [], weData = [], hoData = [];
+  var allMonths = Object.keys(appData.attendance).sort();
+  var dm = findDefaultMonth();
+
+  if (period === 'quarter') {
+    title = '📈 季度趋势';
+    var qMap = {};
+    for (var mi = 0; mi < allMonths.length; mi++) {
+      var mStr = allMonths[mi], mData = getMonthData(mStr);
+      var q = Math.ceil(parseInt(mStr.replace('2026年','').replace('月','')) / 3);
+      if (!qMap[q]) qMap[q] = { reg:0, wd:0, we:0, ho:0 };
+      qMap[q].reg += mData.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
+      qMap[q].wd += mData.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
+      qMap[q].we += mData.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
+      qMap[q].ho += mData.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
+    }
+    labels = Object.keys(qMap).map(function(q){ return 'Q'+q; });
+    regData = labels.map(function(_,i){ return Math.round(qMap[Object.keys(qMap)[i]].reg * 10) / 10; });
+    wdData = labels.map(function(_,i){ return Math.round(qMap[Object.keys(qMap)[i]].wd * 10) / 10; });
+    weData = labels.map(function(_,i){ return Math.round(qMap[Object.keys(qMap)[i]].we * 10) / 10; });
+    hoData = labels.map(function(_,i){ return Math.round(qMap[Object.keys(qMap)[i]].ho * 10) / 10; });
+  } else if (period === 'week') {
+    title = '📈 周度趋势';
+    var mIdx = parseInt(dm.replace('2026年','').replace('月',''));
+    var maxDay = new Date(2026, mIdx, 0).getDate();
+    var weeklyMap = {};
+    var curData = getMonthData(dm);
+    for (var wi = 0; wi < curData.length; wi++) {
+      var rec = curData[wi];
+      var daily = rec.daily || [];
+      for (var di = 0; di < daily.length; di++) {
+        var d = daily[di];
+        if (d.day > (new Date().getDate()) && new Date().getFullYear() === 2026 && new Date().getMonth()+1 === mIdx) break;
+        var w = getISOWeek(2026, mIdx, d.day);
+        if (!weeklyMap[w]) weeklyMap[w] = { reg:0, wd:0, we:0, ho:0 };
+        var n = d._normal !== undefined ? d._normal : 0;
+        var l = d._lianban !== undefined ? d._lianban : 0;
+        var o = d._ot !== undefined ? d._ot : 0;
+        if (isWeekend(dm, d.day)) { weeklyMap[w].we += n + l + o; }
+        else { weeklyMap[w].reg += Math.min(n, 8); weeklyMap[w].wd += Math.max(0, n-8) + l + o; }
+      }
+    }
+    labels = Object.keys(weeklyMap).map(Number).sort(function(a,b){return a-b;}).map(function(w){ return 'W'+w; });
+    regData = labels.map(function(_,i){ return Math.round(weeklyMap[Object.keys(weeklyMap).sort(function(a,b){return a-b})[i]].reg * 10) / 10; });
+    wdData = labels.map(function(_,i){ return Math.round(weeklyMap[Object.keys(weeklyMap).sort(function(a,b){return a-b})[i]].wd * 10) / 10; });
+    weData = labels.map(function(_,i){ return Math.round(weeklyMap[Object.keys(weeklyMap).sort(function(a,b){return a-b})[i]].we * 10) / 10; });
+    hoData = labels.map(function(_,i){ return Math.round(weeklyMap[Object.keys(weeklyMap).sort(function(a,b){return a-b})[i]].ho * 10) / 10; });
+  } else if (period === 'day') {
+    title = '📈 日度趋势';
+    var mIdx2 = parseInt(dm.replace('2026年','').replace('月',''));
+    var maxDay2 = new Date(2026, mIdx2, 0).getDate();
+    var today2 = (new Date().getFullYear() === 2026 && new Date().getMonth()+1 === mIdx2) ? new Date().getDate() : maxDay2;
+    labels = [];
+    for (var di2 = 1; di2 <= today2; di2++) labels.push(di2+'日');
+    var hourlyReg = [], hourlyWd = [], hourlyWe = [];
+    var cdData = getMonthData(dm);
+    for (var di2 = 1; di2 <= today2; di2++) {
+      var dayReg = 0, dayWd = 0, dayWe = 0;
+      for (var ei = 0; ei < cdData.length; ei++) {
+        var dVal = cdData[ei].daily ? cdData[ei].daily.find(function(dd){ return dd.day === di2; }) : null;
+        if (!dVal) continue;
+        var n = dVal._normal || 0, l = dVal._lianban || 0, o = dVal._ot || 0;
+        if (isWeekend(dm, di2)) { dayWe += n + l + o; }
+        else { dayReg += Math.min(n, 8); dayWd += Math.max(0, n-8) + l + o; }
+      }
+      hourlyReg.push(Math.round(dayReg * 10) / 10);
+      hourlyWd.push(Math.round(dayWd * 10) / 10);
+      hourlyWe.push(Math.round(dayWe * 10) / 10);
+    }
+    regData = hourlyReg; wdData = hourlyWd; weData = hourlyWe; hoData = [];
+  } else {
+    // 月度 (default)
+    title = '📈 月度趋势';
+    labels = allMonths.map(function(m){ return m.replace('2026年','').replace('月',''); });
+    regData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.regular_hours)||0); }, 0); });
+    wdData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.weekday_ot)||0); }, 0); });
+    weData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.weekend_ot)||0); }, 0); });
+    hoData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.holiday_ot)||0); }, 0); });
+  }
+  document.getElementById('trendChartTitle').textContent = title;
+  trendChart = new Chart(ctx, {
+    type: 'bar',
+    data: {
+      labels: labels,
+      datasets: [
+        { label: '正常班', data: regData, backgroundColor: '#3498db', borderRadius: 4 },
+        { label: '平时加班', data: wdData, backgroundColor: '#e74c3c', borderRadius: 4 },
+        { label: '周末加班', data: weData, backgroundColor: '#f39c12', borderRadius: 4 },
+        { label: '节假日加班', data: hoData, backgroundColor: '#9b59b6', borderRadius: 4 }
+      ]
+    },
+    options: {
+      responsive: true, maintainAspectRatio: false,
+      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } } },
+      scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: '小时 (h)' }, grid: { color: '#f0f0f0' } } }
+    }
+  });
 }
 
 function renderOTTypeChart(data) {
