@@ -1357,7 +1357,7 @@ function getISOWeek(year, month, day) {
 }
 
 // Get Monday-Sunday date range for a given ISO week
-function getWeekRange(weekNum) {
+function getWeekRange(weekNum, month) {
   var jan4 = new Date(2026, 0, 4);
   var jan4Week = getISOWeek(2026, 1, 4);
   var weekDiff = weekNum - jan4Week;
@@ -1365,6 +1365,14 @@ function getWeekRange(weekNum) {
   monday.setDate(jan4.getDate() - ((jan4.getDay() + 6) % 7) + weekDiff * 7);
   var sunday = new Date(monday);
   sunday.setDate(monday.getDate() + 6);
+  if (month !== undefined) {
+    var mNum = parseInt(month.replace('2026年','').replace('月',''));
+    var mDays = new Date(2026, mNum, 0).getDate();
+    // Clip range to within the month
+    var showMon = (monday.getMonth() + 1 === mNum) ? monday.getDate() : 1;
+    var showSun = (sunday.getMonth() + 1 === mNum) ? sunday.getDate() : mDays;
+    return mNum+'月'+showMon+'日-'+mNum+'月'+showSun+'日';
+  }
   return (monday.getMonth()+1)+'月'+monday.getDate()+'日-'+(sunday.getMonth()+1)+'月'+sunday.getDate()+'日';
 }
 
@@ -1476,7 +1484,7 @@ function renderSchedule() {
       var wk = weekNums[wi];
       var sections = restByWeek[wk];
       html += '<div style="margin-bottom:16px;padding:12px 16px;background:#fff;border-radius:8px;border:1px solid var(--border);">';
-      html += '<div style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;">W'+wk+'（'+getWeekRange(wk)+'）</div>';
+      html += '<div style="font-size:14px;font-weight:700;color:var(--primary);margin-bottom:10px;">W'+wk+'（'+getWeekRange(wk, month)+'）</div>';
       var secKeys = Object.keys(sections).sort();
       for (var si = 0; si < secKeys.length; si++) {
         var sec = secKeys[si];
