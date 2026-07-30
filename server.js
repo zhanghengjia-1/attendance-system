@@ -45,6 +45,92 @@ app.get('/api/data', async (req, res) => {
   }
 });
 
+// Compute daily attendance for a specific date (same logic as frontend getMonthData)
+function computeNormal(t) {
+  if (t===null||t===undefined||t==='/'||t==='') return 0;
+  const s = String(t).trim(); if (s==='休'||s==='假') return 0; if (s==='4') return 8;
+  const n = parseFloat(s); return isNaN(n)?0:n;
+}
+function hoursToNum(v) { if (v===null||v===undefined||v==='/'||v==='') return 0; return parseFloat(v)||0; }
+function isWeekend(monthStr, day) {
+  const m = parseInt(monthStr.replace('2026年','').replace('月',''));
+  const dow = new Date(2026, m-1, day).getDay();
+  return dow === 0 || dow === 6;
+}
+function computeTotalsForScript(daily, monthStr) {
+  let rh=0, wdo=0, weo=0, ho=0, lb=0;
+  for (const d of daily) {
+    const n = d._normal||0, l = d._lianban||0, o = d._ot||0;
+    lb += l;
+    if (isWeekend(monthStr, d.day)) { weo += n+l+o; }
+    else { const reg = Math.min(n,8); rh += reg; wdo += Math.max(0,n-8)+l+o; }
+  }
+  return { regular_hours: Math.round(rh*10)/10, lianban: Math.round(lb*10)/10, weekday_ot: Math.round(wdo*10)/10, weekend_ot: Math.round(weo*10)/10, holiday_ot: Math.round(ho*10)/10, total_hours: Math.round((rh+wdo+weo+ho)*10)/10 };
+}
+
+app.get('/api/daily-summary', async (req, res) => {
+  try {
+    const dateStr = req.query.date;
+    if (!dateStr) return res.status(400).json({ error: 'Missing date param (YYYY-MM-DD)' });
+    const d = new Date(dateStr);
+    if (isNaN(d.getTime())) return res.status(400).json({ error: 'Invalid date' });
+    const monthStr = `${d.getFullYear()}年${d.getMonth()+1}月`;
+    const day = d.getDate();
+
+    const base = loadBaseData();
+    const [editedData, dailyEdits, sections] = await Promise.all([
+      db.getEditedData(), db.getDailyEdits(), db.getSectionAssignments()
+    ]);
+
+    const monthRecords = (base.attendance || {})[monthStr] || [];
+    const monthEdits = (dailyEdits || {})[monthStr] || {};
+    const editOverrides = (editedData || {})[monthStr] || {};
+
+    const result = [];
+
+    for (const rec of monthRecords) {
+      const empId = rec.emp_id;
+      const empName = (base.employees || {})[empId] ? base.employees[empId].name : rec.name;
+      const daily = rec.daily || [];
+      const empEdits = monthEdits[empId] || {};
+
+      // Compute for target day
+      const dayRec = daily.find(dd => dd.day === day);
+      const ev = empEdits[String(day)];
+      let n=0, l=0, o=0;
+      if (ev !== undefined && ev !== null) {
+        if (typeof ev === 'object') { n = parseFloat(ev.n)||0; l = parseFloat(ev.l)||0; o = parseFloat(ev.o)||0; }
+        else { n = parseFloat(ev)||0; }
+      } else if (dayRec) {
+        n = computeNormal(dayRec.type);
+        o = hoursToNum(dayRec.hours);
+      }
+
+      // Compute monthly totals the exact same way as getMonthData
+      const mergedDaily = daily.map(function(dd) {
+        const dk = String(dd.day);
+        const edit = empEdits[dk];
+        if (edit !== undefined) {
+          if (typeof edit === 'object' && edit !== null) return { day: dd.day, _normal: parseFloat(edit.n)||0, _lianban: parseFloat(edit.l)||0, _ot: parseFloat(edit.o)||0 };
+          else return { day: dd.day, _normal: parseFloat(edit)||0, _lianban: 0, _ot: 0 };
+        }
+        return { day: dd.day, _normal: computeNormal(dd.type), _lianban: 0, _ot: hoursToNum(dd.hours) };
+      });
+      const totals = computeTotalsForScript(mergedDaily, monthStr);
+
+      const section = sections[empId] || '未分组';
+      const total = n + l + o;
+
+      result.push({ empId, name: empName, section, normal: n, lianban: l, overtime: o, total, monthly: totals.total_hours, monthReg: totals.regular_hours });
+    }
+
+    res.json({ date: dateStr, day, month: monthStr, employees: result, sectionAssignments: sections });
+  } catch(e) {
+    console.error('GET /api/daily-summary error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Save attendance edits (monthly summary level)
 app.post('/api/attendance/edit', async (req, res) => {
   try {
