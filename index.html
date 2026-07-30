@@ -553,7 +553,7 @@ function getMonthData(month) {
       if (isFutureDay) return Object.assign({}, d, {_normal:0, _ot:0});
       var edit = dEdits[r.emp_id] ? dEdits[r.emp_id][dk] : undefined;
       if (edit!==undefined) {
-        if (typeof edit==='object'&&edit!==null) return Object.assign({}, d, {_normal:edit.n, _lianban:edit.l||0, _ot:(edit.l||0)+edit.o});
+        if (typeof edit==='object'&&edit!==null) return Object.assign({}, d, {_normal:edit.n, _lianban:edit.l||0, _ot:edit.o});
         else return Object.assign({}, d, {_normal:parseFloat(edit)||0, _lianban:0, _ot:0});
       }
       return Object.assign({}, d, {_normal:typeToNormalHours(d.type), _lianban:0, _ot:hoursToNum(d.hours)});
@@ -1080,7 +1080,7 @@ function renderEditableTable() {
       const isWorking = (typeof tv.n === 'number' && tv.n > 0) || (typeof tv.l === 'number' && tv.l > 0) || (typeof tv.o === 'number' && tv.o > 0);
       cells += `<td style="text-align:center;padding:2px;background:#f0f6ff;"><button class="btn btn-xs ${isWorking?'btn-success':'btn-outline'}" onclick="toggleToday('${month}','${r.emp_id}',${today})" style="font-size:9px;padding:2px 4px;white-space:nowrap;">${isWorking?'✅上班':'休息'}</button></td>`;
     }
-    const mergedDaily = daily.map(dd => { const dv = getDayValues(daily, empEdits, dd.day); const isF = today !== null && dd.day > today; return { ...dd, _normal: isF ? 0 : dv.n, _lianban: isF ? 0 : dv.l, _ot: isF ? 0 : (dv.l + dv.o) }; });
+    const mergedDaily = daily.map(dd => { const dv = getDayValues(daily, empEdits, dd.day); const isF = today !== null && dd.day > today; return { ...dd, _normal: isF ? 0 : dv.n, _lianban: isF ? 0 : dv.l, _ot: isF ? 0 : dv.o }; });
     const totals = computeTotals(mergedDaily, month);
     for (let d = 1; d <= numDays; d++) {
       const dv = getDayValues(daily, empEdits, d);
@@ -1420,7 +1420,7 @@ function renderSchedule() {
       var d = daily[di];
       var w = getISOWeek(2026, m, d.day);
       if (!weekHours[w]) weekHours[w] = 0;
-      weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._ot !== undefined ? d._ot : 0);
+      weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._lianban !== undefined ? d._lianban : 0) + (d._ot !== undefined ? d._ot : 0);
     }
     var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
     for (var wi = 0; wi < weekKeys.length; wi++) {
