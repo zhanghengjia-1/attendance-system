@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * 考勤系统 · 每日出勤推送脚本
- * 推送前一天所有人出勤工时到飞书群（统计表格式）
+ * 推送前一天所有人出勤工时到飞书群
  * 用法: node feishu-push.js [日期]
  */
 
@@ -14,16 +14,6 @@ function getYesterday() {
   return d;
 }
 
-function pad(s, width) {
-  s = String(s);
-  let len = 0;
-  for (const ch of s) {
-    if (/[\u4e00-\u9fa5]/.test(ch)) len += 2;
-    else len += 1;
-  }
-  return s + ' '.repeat(Math.max(0, width - len));
-}
-
 async function main() {
   const dateArg = process.argv[2];
   const targetDate = dateArg ? new Date(dateArg) : getYesterday();
@@ -31,7 +21,6 @@ async function main() {
   const dateLabel = `${targetDate.getFullYear()}年${targetDate.getMonth()+1}月${targetDate.getDate()}日`;
   const dateISO = targetDate.getFullYear()+'-'+String(targetDate.getMonth()+1).padStart(2,'0')+'-'+String(targetDate.getDate()).padStart(2,'0');
 
-  // 1. Fetch computed data from server (same logic as frontend)
   let data;
   try {
     const res = await fetch(`${API_BASE}/api/daily-summary?date=${dateISO}`);
@@ -45,29 +34,22 @@ async function main() {
   const rows = data.employees || [];
   if (rows.length === 0) {
     const msg = `📋 ${dateLabel}（周${weekday}）\n无出勤数据`;
-    await fetch(WEBHOOK_URL, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ msg_type: 'text', content: { text: msg } })
-    });
+    await fetch(WEBHOOK_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ msg_type: 'text', content: { text: msg } }) });
     console.log('已推送：无数据');
     return;
   }
 
   const sectionOrder = ['模组','整机','2.5前加工','库房','测包','立库'];
-
-  // Sort by section order then name
   rows.sort((a, b) => {
     const ia = sectionOrder.indexOf(a.section), ib = sectionOrder.indexOf(b.section);
     if (ia !== ib) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
     return a.name.localeCompare(b.name, 'zh');
   });
 
-  // Compute totals
-  let grandN = 0, grandL = 0, grandO = 0, grandT = 0;
+  let grandN = 0, grandL = 0, grandO = 0;
   const sectionTotals = {};
   for (const r of rows) {
-    grandN += r.normal; grandL += r.lianban; grandO += r.overtime; grandT += r.monthly;
+    grandN += r.normal; grandL += r.lianban; grandO += r.overtime;
     if (!sectionTotals[r.section]) sectionTotals[r.section] = { n:0, l:0, o:0, t:0, m:0, count:0 };
     sectionTotals[r.section].n += r.normal;
     sectionTotals[r.section].l += r.lianban;
@@ -77,64 +59,78 @@ async function main() {
     sectionTotals[r.section].count++;
   }
 
-  // Build interactive card
-  const elements = [
-    {
-      tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**📋 ${dateLabel}（周${weekday}）出勤统计**\n\n**全组**：${rows.length}人 · 正常班 ${grandN.toFixed(1)}h · 加班 ${(grandL+grandO).toFixed(1)}h · **总工时 ${(grandN+grandL+grandO).toFixed(1)}h**`
-      }
-    },
-    { tag: 'hr' }
-  ];
+  // Build text table with monospace formatting using column_set
+  const elements = [];
+
+  // Header
+  elements.push({
+    tag: 'div',
+    text: { tag: 'lark_md', content: `**📋 ${dateLabel}（周${weekday}）出勤统计**` }
+  });
+  elements.push({
+    tag: 'div',
+    text: { tag: 'lark_md', content: `全组 ${rows.length}人 · 正常 ${grandN.toFixed(1)}h · 加班 ${(grandL+grandO).toFixed(1)}h · **总工时 ${(grandN+grandL+grandO).toFixed(1)}h**` }
+  });
+  elements.push({ tag: 'hr' });
 
   for (const sec of sectionOrder.concat(['未分组'])) {
     if (!sectionTotals[sec]) continue;
     const st = sectionTotals[sec];
+    const secRows = rows.filter(r => r.section === sec);
+
+    // Section title
     elements.push({
       tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**【${sec}】**（${st.count}人）累计 ${st.m.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h`
-      }
+      text: { tag: 'lark_md', content: `**【${sec}】**（${st.count}人）累计 ${st.m.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h` }
     });
-    const secRows = rows.filter(r => r.section === sec);
+
+    // Header row as column_set
+    elements.push({
+      tag: 'column_set',
+      flex_mode: 'none',
+      background_style: 'grey',
+      columns: [
+        { tag: 'column', width: 'weighted', weight: 2, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**姓名**' } }] },
+        { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**正常**' } }] },
+        { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**连班**' } }] },
+        { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**加班**' } }] },
+        { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**当天**' } }] },
+        { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: '**当月**' } }] }
+      ]
+    });
+
+    // Data rows
     for (const r of secRows) {
-      const line = [
-        pad(r.name, 8),
-        pad(r.normal > 0 ? r.normal.toString() : '-', 5),
-        pad(r.lianban > 0 ? r.lianban.toString() : '-', 5),
-        pad(r.overtime > 0 ? r.overtime.toString() : '-', 5),
-        pad(r.total.toString(), 5),
-        r.monthly > 0 ? r.monthly.toFixed(1) : '-'
-      ].join('|');
       elements.push({
-        tag: 'div',
-        text: { tag: 'lark_md', content: line }
+        tag: 'column_set',
+        flex_mode: 'none',
+        columns: [
+          { tag: 'column', width: 'weighted', weight: 2, elements: [{ tag: 'div', text: { tag: 'lark_md', content: r.name } }] },
+          { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: r.normal > 0 ? String(r.normal) : '-' } }] },
+          { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: r.lianban > 0 ? String(r.lianban) : '-' } }] },
+          { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: r.overtime > 0 ? String(r.overtime) : '-' } }] },
+          { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: String(r.total) } }] },
+          { tag: 'column', width: 'weighted', weight: 1, elements: [{ tag: 'div', text: { tag: 'lark_md', content: r.monthly > 0 ? r.monthly.toFixed(1) : '-' } }] }
+        ]
       });
     }
+
+    // Subtotal
     elements.push({
       tag: 'div',
-      text: {
-        tag: 'lark_md',
-        content: `**小计**：${st.n.toFixed(1)}h | 连班 ${st.l.toFixed(1)}h | 加班 ${st.o.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h | **当月 ${st.m.toFixed(1)}h**`
-      }
+      text: { tag: 'lark_md', content: `**小计：${st.n.toFixed(1)}h | 连班 ${st.l.toFixed(1)}h | 加班 ${st.o.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h | 当月 ${st.m.toFixed(1)}h**` }
     });
     elements.push({ tag: 'hr' });
   }
 
   const card = {
     config: { wide_screen_mode: true },
-    header: {
-      title: { tag: 'plain_text', content: `考勤日报 · ${dateLabel}` }
-    },
+    header: { title: { tag: 'plain_text', content: `考勤日报 · ${dateLabel}` } },
     elements: elements
   };
 
   const res = await fetch(WEBHOOK_URL, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: 'POST', headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ msg_type: 'interactive', card: card })
   });
   const result = await res.json();
