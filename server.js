@@ -106,9 +106,12 @@ app.get('/api/daily-summary', async (req, res) => {
         o = hoursToNum(dayRec.hours);
       }
 
-      // Compute monthly totals the exact same way as getMonthData
+      // Compute monthly totals the exact same way as getMonthData (filter out future days)
+      const now = new Date();
+      const todayD = (now.getFullYear() === 2026 && now.getMonth()+1 === d.getMonth()+1) ? now.getDate() : 31;
       const mergedDaily = daily.map(function(dd) {
         const dk = String(dd.day);
+        if (dd.day > todayD) return { day: dd.day, _normal: 0, _lianban: 0, _ot: 0 };
         const edit = empEdits[dk];
         if (edit !== undefined) {
           if (typeof edit === 'object' && edit !== null) return { day: dd.day, _normal: parseFloat(edit.n)||0, _lianban: parseFloat(edit.l)||0, _ot: parseFloat(edit.o)||0 };
