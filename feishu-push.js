@@ -3,7 +3,6 @@
  * 考勤系统 · 每日出勤推送脚本
  * 推送前一天所有人出勤工时到飞书群（统计表格式）
  * 用法: node feishu-push.js [日期]
- * 日期可选，默认前一天
  */
 
 const WEBHOOK_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/30ee6979-4b58-46e6-9f96-1d45b8d78bfc';
@@ -31,6 +30,17 @@ function computeOT(hours) {
   return isNaN(h) ? 0 : h;
 }
 
+function pad(s, width) {
+  s = String(s);
+  // Treat wide chars (Chinese) as taking 2 spaces
+  let len = 0;
+  for (const ch of s) {
+    if (/[\u4e00-\u9fa5]/.test(ch)) len += 2;
+    else len += 1;
+  }
+  return s + ' '.repeat(Math.max(0, width - len));
+}
+
 async function main() {
   const dateArg = process.argv[2];
   const targetDate = dateArg ? new Date(dateArg) : getYesterday();
@@ -39,7 +49,6 @@ async function main() {
   const weekday = ['日','一','二','三','四','五','六'][targetDate.getDay()];
   const dateLabel = `${targetDate.getFullYear()}年${targetDate.getMonth()+1}月${targetDate.getDate()}日`;
 
-  // Fetch data
   let data;
   try {
     const res = await fetch(`${API_BASE}/api/data`);
@@ -60,15 +69,15 @@ async function main() {
   const sectionAssign = data.sectionAssignments || {};
 
   const sectionOrder = ['模组','整机','2.5前加工','库房','测包','立库'];
-  // Collect all employees with their daily data
   const rows = [];
   for (const rec of monthRecords) {
     const empId = rec.emp_id;
     const empName = (data.employees || {})[empId] ? data.employees[empId].name : rec.name;
     const daily = rec.daily || [];
+
+    // Compute today's data
     const dayRec = daily.find(d => d.day === day);
     const editVal = monthEdits[empId] ? monthEdits[empId][String(day)] : undefined;
-
     let n = 0, l = 0, o = 0;
     if (editVal) {
       n = parseFloat(editVal.n) || 0;
@@ -78,78 +87,115 @@ async function main() {
       n = computeNormal(dayRec.type);
       o = computeOT(dayRec.hours);
     }
-    const total = n + l + o;
+    const todayTotal = n + l + o;
+
+    // Compute monthly total (from record.daily + edits)
+    const monthlySum = (rec.regular_hours || 0) + (rec.weekday_ot || 0) + (rec.weekend_ot || 0) + (rec.holiday_ot || 0);
+    // Approximate today's contribution removed - use monthly total as is
+
     const section = sectionAssign[empId] || '未分组';
 
-    rows.push({ name: empName, section, normal: n, lianban: l, overtime: o, total });
+    rows.push({ name: empName, section, normal: n, lianban: l, overtime: o, total: todayTotal, monthly: monthlySum });
   }
 
-  // Sort by section order then name
   rows.sort((a, b) => {
     const ia = sectionOrder.indexOf(a.section), ib = sectionOrder.indexOf(b.section);
     if (ia !== ib) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
     return a.name.localeCompare(b.name, 'zh');
   });
 
-  // Build summary
+  // Group by section, build table sections
+  let body = `📋 **${dateLabel}（周${weekday}）出勤统计**\n\n`;
+
+  // Overall summary - card header
+  let grandN = 0, grandL = 0, grandO = 0, grandT = 0, grandM = 0;
   const sectionTotals = {};
-  let grandTotalN = 0, grandTotalL = 0, grandTotalO = 0, grandTotalAll = 0;
   for (const r of rows) {
-    if (!sectionTotals[r.section]) sectionTotals[r.section] = { n:0, l:0, o:0, total:0, count:0 };
+    grandN += r.normal; grandL += r.lianban; grandO += r.overtime; grandT += r.total; grandM += r.monthly;
+    if (!sectionTotals[r.section]) sectionTotals[r.section] = { n:0, l:0, o:0, t:0, m:0, count:0 };
     sectionTotals[r.section].n += r.normal;
     sectionTotals[r.section].l += r.lianban;
     sectionTotals[r.section].o += r.overtime;
-    sectionTotals[r.section].total += r.total;
+    sectionTotals[r.section].t += r.total;
+    sectionTotals[r.section].m += r.monthly;
     sectionTotals[r.section].count++;
-    grandTotalN += r.normal;
-    grandTotalL += r.lianban;
-    grandTotalO += r.overtime;
-    grandTotalAll += r.total;
   }
 
-  // Build table message
-  let msg = `📋 **${dateLabel}（周${weekday}）出勤统计**\n\n`;
+  // Build interactive card using divs only (Feishu table is fragile)
+  const elements = [
+    {
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**📋 ${dateLabel}（周${weekday}）出勤统计**\n\n**全组**：${rows.length}人 · 正常班 ${grandN.toFixed(0)}h · 加班 ${(grandL + grandO).toFixed(0)}h · **总工时 ${(grandN+grandL+grandO).toFixed(0)}h**`
+      }
+    },
+    { tag: 'hr' }
+  ];
 
-  for (const sec of sectionOrder) {
+  for (const sec of sectionOrder.concat(['未分组'])) {
     if (!sectionTotals[sec]) continue;
     const st = sectionTotals[sec];
-    msg += `**【${sec}】**（${st.count}人）\n`;
-    // Table header
-    msg += '姓名\t正常班\t连班\t加班\t合计\n';
-    // Filter rows for this section
+    // Section header
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**【${sec}】**（${st.count}人）累计 ${st.m.toFixed(0)}h | 当天 ${st.t.toFixed(0)}h`
+      }
+    });
+    // Build rows
     const secRows = rows.filter(r => r.section === sec);
+    // Header
+    elements.push({
+      tag: 'div',
+      fields: [
+        { is_short: false, text: { tag: 'lark_md', content: `姓名   | 正常 | 连班 | 加班 | 当天 | 当月` } }
+      ]
+    });
+    // Separator
+    elements.push({
+      tag: 'div',
+      text: { tag: 'lark_md', content: `<font color="grey">--- | --- | --- | --- | --- | ---</font>` }
+    });
+    // Each employee as a row
     for (const r of secRows) {
-      const parts = [r.name];
-      parts.push(r.normal > 0 ? String(r.normal) : '-');
-      parts.push(r.lianban > 0 ? String(r.lianban) : '-');
-      parts.push(r.overtime > 0 ? String(r.overtime) : '-');
-      parts.push(String(r.total));
-      msg += parts.join('\t') + '\n';
+      const line = [
+        pad(r.name, 8),
+        pad(r.normal > 0 ? r.normal.toString() : '-', 4),
+        pad(r.lianban > 0 ? r.lianban.toString() : '-', 4),
+        pad(r.overtime > 0 ? r.overtime.toString() : '-', 4),
+        pad(r.total.toString(), 4),
+        r.monthly > 0 ? r.monthly.toFixed(0) : '-'
+      ].join('|');
+      elements.push({
+        tag: 'div',
+        text: { tag: 'lark_md', content: line }
+      });
     }
-    msg += `小计\t${st.n.toFixed(0)}\t${st.l.toFixed(0)}\t${st.o.toFixed(0)}\t${st.total.toFixed(0)}\n\n`;
+    // Subtotal
+    elements.push({
+      tag: 'div',
+      text: {
+        tag: 'lark_md',
+        content: `**小计**：${st.n.toFixed(0)}h | 连班 ${st.l.toFixed(0)}h | 加班 ${st.o.toFixed(0)}h | 当天 ${st.t.toFixed(0)}h | **当月 ${st.m.toFixed(0)}h**`
+      }
+    });
+    elements.push({ tag: 'hr' });
   }
 
-  // 未分组
-  if (sectionTotals['未分组']) {
-    const st = sectionTotals['未分组'];
-    msg += `**【未分组】**（${st.count}人）\n`;
-    msg += '姓名\t正常班\t连班\t加班\t合计\n';
-    const ur = rows.filter(r => r.section === '未分组');
-    for (const r of ur) {
-      msg += `${r.name}\t${r.normal||'-'}\t${r.lianban||'-'}\t${r.overtime||'-'}\t${r.total}\n`;
-    }
-    msg += `小计\t${st.n.toFixed(0)}\t${st.l.toFixed(0)}\t${st.o.toFixed(0)}\t${st.total.toFixed(0)}\n\n`;
-  }
+  const card = {
+    config: { wide_screen_mode: true },
+    header: {
+      title: { tag: 'plain_text', content: `考勤日报 · ${dateLabel}` }
+    },
+    elements: elements
+  };
 
-  // Grand total
-  msg += `📊 **全组合计**：${rows.length} 人出勤\n`;
-  msg += `正常班 ${grandTotalN.toFixed(0)}h | 连班 ${grandTotalL.toFixed(0)}h | 加班 ${grandTotalO.toFixed(0)}h | **总工时 ${grandTotalAll.toFixed(0)}h**`;
-
-  // Send to Feishu
   const res = await fetch(WEBHOOK_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ msg_type: 'text', content: { text: msg } })
+    body: JSON.stringify({ msg_type: 'interactive', card: card })
   });
   const result = await res.json();
   if (result.StatusCode === 0 || result.code === 0) {
