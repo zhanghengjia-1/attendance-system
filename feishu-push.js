@@ -74,10 +74,11 @@ async function main() {
     const empId = rec.emp_id;
     const empName = (data.employees || {})[empId] ? data.employees[empId].name : rec.name;
     const daily = rec.daily || [];
+    const empEdits = monthEdits[empId] || {};
 
     // Compute today's data
     const dayRec = daily.find(d => d.day === day);
-    const editVal = monthEdits[empId] ? monthEdits[empId][String(day)] : undefined;
+    const editVal = empEdits[String(day)];
     let n = 0, l = 0, o = 0;
     if (editVal) {
       n = parseFloat(editVal.n) || 0;
@@ -89,13 +90,29 @@ async function main() {
     }
     const todayTotal = n + l + o;
 
-    // Compute monthly total (from record.daily + edits)
-    const monthlySum = (rec.regular_hours || 0) + (rec.weekday_ot || 0) + (rec.weekend_ot || 0) + (rec.holiday_ot || 0);
-    // Approximate today's contribution removed - use monthly total as is
+    // Compute monthly total from ALL daily records (handle base + edits)
+    let monthN = 0, monthL = 0, monthO = 0;
+    for (const dd of daily) {
+      const dk = String(dd.day);
+      const ev = empEdits[dk];
+      let dn = 0, dl = 0, dOt = 0;
+      if (ev) {
+        dn = parseFloat(ev.n) || 0;
+        dl = parseFloat(ev.l) || 0;
+        dOt = parseFloat(ev.o) || 0;
+      } else {
+        dn = computeNormal(dd.type);
+        dOt = computeOT(dd.hours);
+      }
+      monthN += dn;
+      monthL += dl;
+      monthO += dOt;
+    }
+    const monthTotal = monthN + monthL + monthO;
 
     const section = sectionAssign[empId] || '未分组';
 
-    rows.push({ name: empName, section, normal: n, lianban: l, overtime: o, total: todayTotal, monthly: monthlySum });
+    rows.push({ name: empName, section, normal: n, lianban: l, overtime: o, total: todayTotal, monthly: monthTotal });
   }
 
   rows.sort((a, b) => {
