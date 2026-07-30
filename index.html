@@ -6,6 +6,7 @@
 <title>设备组考勤管理系统 - SYRC</title>
 <script>window.CHART_LOAD_FAIL=!1;</script>
 <script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.CHART_LOAD_FAIL=!0;console.warn('Chart.js CDN failed, retrying with backup...');var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';s.onerror=function(){window.CHART_LOAD_FAIL=!0;console.error('Chart.js all CDNs failed')};document.head.appendChild(s);"></script>
+<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" onerror="console.warn('DataLabels CDN failed')"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -847,22 +848,32 @@ function renderTrendChart(period) {
     hoData = allMonths.map(function(m){ return getMonthData(m).reduce(function(s,r){ return s+(parseFloat(r.holiday_ot)||0); }, 0); });
   }
   document.getElementById('trendChartTitle').textContent = title;
+  // Calculate total line data
+  var totalData = [];
+  for (var ti = 0; ti < labels.length; ti++) {
+    totalData.push(Math.round(((regData[ti]||0) + (wdData[ti]||0) + (weData[ti]||0) + (hoData[ti]||0)) * 10) / 10);
+  }
   trendChart = new Chart(ctx, {
     type: 'bar',
     data: {
       labels: labels,
       datasets: [
-        { label: '正常班', data: regData, backgroundColor: '#3498db', borderRadius: 4 },
-        { label: '平时加班', data: wdData, backgroundColor: '#e74c3c', borderRadius: 4 },
-        { label: '周末加班', data: weData, backgroundColor: '#f39c12', borderRadius: 4 },
-        { label: '节假日加班', data: hoData, backgroundColor: '#9b59b6', borderRadius: 4 }
+        { label: '正常班', data: regData, backgroundColor: '#3498db', borderRadius: 4, order: 2 },
+        { label: '平时加班', data: wdData, backgroundColor: '#e74c3c', borderRadius: 4, order: 2 },
+        { label: '周末加班', data: weData, backgroundColor: '#f39c12', borderRadius: 4, order: 2 },
+        { label: '节假日加班', data: hoData, backgroundColor: '#9b59b6', borderRadius: 4, order: 2 },
+        { label: '总工时', data: totalData, type: 'line', borderColor: '#2c3e50', backgroundColor: 'transparent', borderWidth: 2, pointBackgroundColor: '#2c3e50', pointRadius: 4, tension: 0.3, order: 1, datalabels: { align: 'top', anchor: 'end', color: '#2c3e50', font: { weight: 'bold', size: 11 }, offset: 4, formatter: function(v) { return v + 'h'; } } }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } } },
+      plugins: {
+        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
+        datalabels: { display: false } // default off; enabled only for line dataset above
+      },
       scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: '小时 (h)' }, grid: { color: '#f0f0f0' } } }
-    }
+    },
+    plugins: [ChartDataLabels]
   });
 }
 
