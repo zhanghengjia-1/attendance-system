@@ -1264,7 +1264,13 @@ function renderEditableTable() {
   const today = getTodayInMonth(month);
   if (today) document.getElementById('todayLabel').textContent = `${month.replace('2026年','')}${today}日 (${WEEKDAY_NAMES[getDayOfWeek(month, today)]})`;
   else document.getElementById('todayLabel').textContent = '非当月';
-  data.sort((a, b) => (a.name || '').localeCompare(b.name || '', 'zh'));
+  var sectionOrder = ['模组','整机','2.5前加工','库房','测包','立库'];
+  data.sort(function(a, b) {
+    var sa = getSection(a.emp_id) || '', sb = getSection(b.emp_id) || '';
+    var ia = sectionOrder.indexOf(sa), ib = sectionOrder.indexOf(sb);
+    if (ia !== ib) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
+    return (a.name || '').localeCompare(b.name || '', 'zh');
+  });
   const numDays = data.length > 0 ? (data[0].daily || []).length : 31;
   const weekendDays = new Set(); for (let d = 1; d <= numDays; d++) { if (isWeekend(month, d)) weekendDays.add(d); }
 
