@@ -1144,7 +1144,14 @@ function onDayEdit(month, empId, day, field, value) {
   if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
   const dk = String(day);
   let cur = dailyEdits[month][empId][dk];
-  if (cur === undefined || typeof cur !== 'object' || cur === null) cur = { n: (typeof cur === 'number' ? cur : 0), l: 0, o: 0 };
+  if (cur === undefined || typeof cur !== 'object' || cur === null) {
+    // Preserve existing base data for this day
+    var baseData = getMonthData(month).find(function(r){ return r.emp_id === empId; });
+    var baseDaily = baseData ? baseData.daily.find(function(dd){ return dd.day === day; }) : null;
+    var baseN = baseDaily ? typeToNormalHours(baseDaily.type) : 0;
+    var baseO = baseDaily ? hoursToNum(baseDaily.hours) : 0;
+    cur = { n: baseN, l: 0, o: baseO };
+  }
   cur[field] = value === '' ? 0 : (parseFloat(value) || 0);
   dailyEdits[month][empId][dk] = cur;
   // Save immediately (no debounce). No re-render to avoid spinner focus issues.
