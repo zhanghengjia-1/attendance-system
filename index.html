@@ -781,27 +781,27 @@ function renderDashboard() {
     }
   } else if (period === 'week') {
     periodLabel = dm;
-    for (var we = 0; we < data.length; we++) {
-      var rec = data[we];
-      var daily = rec.daily || [];
-      for (var dei = 0; dei < daily.length; dei++) {
-        var d = daily[dei];
-        var n = d._normal || 0, l = d._lianban || 0, o = d._ot || 0;
-        if (isWeekend(dm, d.day)) { twe += n + l + o; }
-        else { tr += Math.min(n, 8); twd += Math.max(0, n-8) + l + o; }
-      }
+    // Use same computation as the trend chart: getMonthData then compute per-employee
+    var weekData = getMonthData(dm);
+    for (var wri = 0; wri < weekData.length; wri++) {
+      var wr = weekData[wri];
+      tr += parseFloat(wr.regular_hours) || 0;
+      twd += parseFloat(wr.weekday_ot) || 0;
+      twe += parseFloat(wr.weekend_ot) || 0;
+      tho += parseFloat(wr.holiday_ot) || 0;
     }
   } else if (period === 'day') {
     periodLabel = new Date().getFullYear()+'年'+(new Date().getMonth()+1)+'月'+new Date().getDate()+'日';
     var mIdx = parseInt(dm.replace('2026年','').replace('月',''));
-    if (new Date().getMonth()+1 === mIdx) {
+    if (new Date().getFullYear() === 2026 && new Date().getMonth()+1 === mIdx) {
       var today = new Date().getDate();
-      for (var dei2 = 0; dei2 < data.length; dei2++) {
-        var dd2 = data[dei2].daily ? data[dei2].daily.find(function(x){ return x.day === today; }) : null;
-        if (!dd2) continue;
-        var n2 = dd2._normal || 0, l2 = dd2._lianban || 0, o2 = dd2._ot || 0;
-        if (isWeekend(dm, today)) { twe += n2 + l2 + o2; }
-        else { tr += Math.min(n2, 8); twd += Math.max(0, n2-8) + l2 + o2; }
+      var dayData = getMonthData(dm);
+      // Sum up all data up to today
+      for (var dri = 0; dri < dayData.length; dri++) {
+        tr += parseFloat(dayData[dri].regular_hours) || 0;
+        twd += parseFloat(dayData[dri].weekday_ot) || 0;
+        twe += parseFloat(dayData[dri].weekend_ot) || 0;
+        tho += parseFloat(dayData[dri].holiday_ot) || 0;
       }
     }
   }
