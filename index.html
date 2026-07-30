@@ -767,21 +767,6 @@ function renderDashboard() {
   try { renderOTTypeChart(data); } catch(e) { console.warn('类型分布图渲染失败:',e); showChartFallback('otTypeChart','加班类型分布',e); }
   try { renderRankTable(); } catch(e) { console.warn('排行表渲染失败:',e); document.getElementById('rankTable').innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary);">数据加载失败，请刷新页面重试</td></tr>'; }
 }
-  }
-
-  const tot = twd+twe+tho;
-  const totalHours = tr + tot;
-  const avg = periodPersonCount>0 ? (tot/periodPersonCount).toFixed(1) : 0;
-  const ex = data.filter(r=>getEffectiveTotal(r,dm)>OT_WARN).length;
-  document.getElementById('statsCards').innerHTML = `
-    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${data.length}</div><div class="sub">${periodLabel} · 设备技术员</div></div>
-    <div class="stat-card warn"><div class="label">⏰ 总加班</div><div class="value">${tot.toFixed(1)}h</div><div class="sub">人均 ${avg}h/人</div></div>
-    <div class="stat-card ${ex>0?'danger':'success'}"><div class="label">⚠️ 超预警线人数</div><div class="value">${ex}</div><div class="sub">预警线：${OT_WARN}h/月</div></div>
-    <div class="stat-card success"><div class="label">📊 总工时</div><div class="value">${totalHours.toFixed(0)}h</div><div class="sub">正常班 ${tr.toFixed(0)}h + 加班 ${tot.toFixed(0)}h</div></div>`;
-  try { renderTrendChart(period); } catch(e) { console.warn('趋势图渲染失败:',e); showChartFallback('trendChart',document.getElementById('trendChartTitle').textContent,e); }
-  try { renderOTTypeChart(data); } catch(e) { console.warn('类型分布图渲染失败:',e); showChartFallback('otTypeChart','加班类型分布',e); }
-  try { renderRankTable(); } catch(e) { console.warn('排行表渲染失败:',e); document.getElementById('rankTable').innerHTML='<tr><td colspan="11" style="text-align:center;padding:30px;color:var(--text-secondary);">数据加载失败，请刷新页面重试</td></tr>'; }
-}
 
 function renderTrendChart(period) {
   const ctx = document.getElementById('trendChart').getContext('2d');
