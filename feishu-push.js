@@ -100,10 +100,17 @@ async function main() {
       const dk = String(dd.day);
       const ev = empEdits[dk];
       let dn = 0, dl = 0, dOt = 0;
-      if (ev) {
-        dn = parseFloat(ev.n) || 0;
-        dl = parseFloat(ev.l) || 0;
-        dOt = parseFloat(ev.o) || 0;
+      if (ev !== undefined && ev !== null) {
+        if (typeof ev === 'object') {
+          dn = parseFloat(ev.n) || 0;
+          dl = parseFloat(ev.l) || 0;
+          dOt = parseFloat(ev.o) || 0;
+          // 兼容旧格式：若没有 l 字段，尝试从外层 lianban 取
+          if (ev.l === undefined && typeof ev.lianban === 'number') dl = ev.lianban;
+        } else {
+          // 旧纯数字格式
+          dn = parseFloat(ev) || 0;
+        }
       } else {
         dn = computeNormal(dd.type);
         dOt = computeOT(dd.hours);
