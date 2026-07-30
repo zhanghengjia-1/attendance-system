@@ -745,21 +745,90 @@ function showChartFallback(canvasId, title, err) {
 function renderDashboard() {
   const period = document.getElementById('dashboardPeriod').value;
   const dm = findDefaultMonth(), data = getMonthData(dm);
+  const allMonths = Object.keys(appData.attendance).sort();
 
-  // Compute stats from current month data (chart handles period visualization)
-  var tr = data.reduce((s,r)=>s+(parseFloat(r.regular_hours)||0),0);
-  var twd = data.reduce((s,r)=>s+(parseFloat(r.weekday_ot)||0),0);
-  var twe = data.reduce((s,r)=>s+(parseFloat(r.weekend_ot)||0),0);
-  var tho = data.reduce((s,r)=>s+(parseFloat(r.holiday_ot)||0),0);
+  var tr = 0, twd = 0, twe = 0, tho = 0;
+  var periodLabel = dm;
+  var personCount = data.length;
+
+  if (period === 'year') {
+    periodLabel = '2026年';
+    for (var yi = 0; yi < allMonths.length; yi++) {
+      var yd = getMonthData(allMonths[yi]);
+      for (var yk = 0; yk < yd.length; yk++) {
+        tr += parseFloat(yd[yk].regular_hours) || 0;
+        twd += parseFloat(yd[yk].weekday_ot) || 0;
+        twe += parseFloat(yd[yk].weekend_ot) || 0;
+        tho += parseFloat(yd[yk].holiday_ot) || 0;
+      }
+    }
+  } else if (period === 'quarter') {
+    var cm = parseInt(dm.replace('2026年','').replace('月',''));
+    var cq = Math.ceil(cm / 3);
+    periodLabel = '2026年Q' + cq;
+    for (var qi = 0; qi < allMonths.length; qi++) {
+      var qm = parseInt(allMonths[qi].replace('2026年','').replace('月',''));
+      if (Math.ceil(qm/3) === cq) {
+        var qd2 = getMonthData(allMonths[qi]);
+        for (var qk = 0; qk < qd2.length; qk++) {
+          tr += parseFloat(qd2[qk].regular_hours) || 0;
+          twd += parseFloat(qd2[qk].weekday_ot) || 0;
+          twe += parseFloat(qd2[qk].weekend_ot) || 0;
+          tho += parseFloat(qd2[qk].holiday_ot) || 0;
+        }
+      }
+    }
+  } else if (period === 'week') {
+    periodLabel = dm;
+    var mNum = parseInt(dm.replace('2026年','').replace('月',''));
+    var isCurMth = (new Date().getFullYear() === 2026 && new Date().getMonth()+1 === mNum);
+    var todayD = isCurMth ? new Date().getDate() : new Date(2026, mNum, 0).getDate();
+    var curWk = getISOWeek(2026, mNum, todayD);
+    for (var wei = 0; wei < data.length; wei++) {
+      var wrec = data[wei];
+      var wdaily = wrec.daily || [];
+      for (var wdi = 0; wdi < wdaily.length; wdi++) {
+        var wd = wdaily[wdi];
+        if (wd.day > todayD) continue;
+        if (getISOWeek(2026, mNum, wd.day) !== curWk) continue;
+        var wn = wd._normal || 0, wl = wd._lianban || 0, wo = wd._ot || 0;
+        if (isWeekend(dm, wd.day)) twe += wn + wl + wo;
+        else { tr += Math.min(wn, 8); twd += Math.max(0, wn-8) + wl + wo; }
+      }
+    }
+  } else if (period === 'day') {
+    periodLabel = new Date().getFullYear()+'年'+(new Date().getMonth()+1)+'月'+new Date().getDate()+'日';
+    var mNumD = parseInt(dm.replace('2026年','').replace('月',''));
+    if (new Date().getFullYear() === 2026 && new Date().getMonth()+1 === mNumD) {
+      var td = new Date().getDate();
+      personCount = 0;
+      for (var dei = 0; dei < data.length; dei++) {
+        var drec = data[dei];
+        var ddaily = drec.daily || [];
+        var ddVal = ddaily.find(function(x){ return x.day === td; });
+        if (!ddVal || (!ddVal._normal && !ddVal._lianban && !ddVal._ot)) continue;
+        personCount++;
+        var dn = ddVal._normal || 0, dl = ddVal._lianban || 0, doOT = ddVal._ot || 0;
+        if (isWeekend(dm, td)) twe += dn + dl + doOT;
+        else { tr += Math.min(dn, 8); twd += Math.max(0, dn-8) + dl + doOT; }
+      }
+    }
+  } else {
+    // month
+    for (var mi = 0; mi < data.length; mi++) {
+      tr += parseFloat(data[mi].regular_hours) || 0;
+      twd += parseFloat(data[mi].weekday_ot) || 0;
+      twe += parseFloat(data[mi].weekend_ot) || 0;
+      tho += parseFloat(data[mi].holiday_ot) || 0;
+    }
+  }
+
   var tot = twd+twe+tho, totalHours = tr+tot;
-  var avg = data.length>0?(tot/data.length).toFixed(1):0;
-  var ex = data.filter(r=>getEffectiveTotal(r,dm)>OT_WARN).length;
-
-  var periodLabels = { month:dm, year:'2026年', quarter:function(){var cm=parseInt(dm.replace('2026年','').replace('月',''));return '2026年Q'+Math.ceil(cm/3);}, week:dm, day:function(){return new Date().getFullYear()+'年'+(new Date().getMonth()+1)+'月'+new Date().getDate()+'日';} };
-  var periodLabel = typeof periodLabels[period] === 'function' ? periodLabels[period]() : periodLabels[period];
+  var avg = personCount>0 ? (tot/personCount).toFixed(1) : 0;
+  var ex = data.filter(function(r){ return getEffectiveTotal(r,dm) > OT_WARN; }).length;
 
   document.getElementById('statsCards').innerHTML = `
-    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${data.length}</div><div class="sub">${periodLabel} · 设备技术员</div></div>
+    <div class="stat-card"><div class="label">👥 在册人数</div><div class="value">${personCount}</div><div class="sub">${periodLabel} · 设备技术员</div></div>
     <div class="stat-card warn"><div class="label">⏰ 总加班</div><div class="value">${tot.toFixed(1)}h</div><div class="sub">人均 ${avg}h/人</div></div>
     <div class="stat-card ${ex>0?'danger':'success'}"><div class="label">⚠️ 超预警线人数</div><div class="value">${ex}</div><div class="sub">预警线：${OT_WARN}h/月</div></div>
     <div class="stat-card success"><div class="label">📊 总工时</div><div class="value">${totalHours.toFixed(0)}h</div><div class="sub">正常班 ${tr.toFixed(0)}h + 加班 ${tot.toFixed(0)}h</div></div>`;
