@@ -250,7 +250,7 @@ tr:hover { background: #f8f9fb; }
       </div>
       <div class="table-card">
         <h3>🏆 本月加班排行 <select id="rankMonth" style="padding:6px 12px;border:1px solid var(--border);border-radius:6px;font-size:13px;"></select></h3>
-        <div class="table-wrap"><table><thead><tr><th>排名</th><th>工号</th><th>姓名</th><th>正常班工时</th><th>平时加班</th><th>周末加班</th><th>节假日加班</th><th>总加班</th><th>总工时</th><th style="color:#7c3aed;">🔮预测总工时</th><th>状态</th></tr></thead><tbody id="rankTable"></tbody></table></div>
+        <div class="table-wrap"><table><thead><tr><th>排名</th><th>工号</th><th>姓名</th><th>正常班</th><th style="color:#e67e22;">连班</th><th>平时加班</th><th>周末加班</th><th>节假日加班</th><th>总加班</th><th>总工时</th><th style="color:#7c3aed;">🔮预测总工时</th><th>状态</th></tr></thead><tbody id="rankTable"></tbody></table></div>
       </div>
     </div>
 
@@ -481,14 +481,17 @@ function typeToNormalHours(t) {
 function hoursToNum(v) { if (v===null||v===undefined||v==='/'||v==='') return 0; return parseFloat(v)||0; }
 
 function computeTotals(daily, month) {
-  let rh=0, wdo=0, weo=0, ho=0;
+  let rh=0, wdo=0, weo=0, ho=0, lb=0;
   for (const d of daily) {
-    const n = (d._normal!==undefined)?d._normal:0, o = (d._ot!==undefined)?d._ot:0;
-    if (isWeekend(month, d.day)) { weo += n+o; }
-    else { const reg = Math.min(n,8); rh += reg; wdo += Math.max(0,n-8)+o; }
+    const n = (d._normal!==undefined)?d._normal:0;
+    const l = (d._lianban!==undefined)?d._lianban:0;
+    const o = (d._ot!==undefined)?d._ot:0;
+    lb += l;
+    if (isWeekend(month, d.day)) { weo += n+l+o; }
+    else { const reg = Math.min(n,8); rh += reg; wdo += Math.max(0,n-8)+l+o; }
   }
   const th = rh+wdo+weo+ho;
-  return { regular_hours: Math.round(rh*10)/10, weekday_ot: Math.round(wdo*10)/10, weekend_ot: Math.round(weo*10)/10, holiday_ot: Math.round(ho*10)/10, total_hours: Math.round(th*10)/10 };
+  return { regular_hours: Math.round(rh*10)/10, lianban: Math.round(lb*10)/10, weekday_ot: Math.round(wdo*10)/10, weekend_ot: Math.round(weo*10)/10, holiday_ot: Math.round(ho*10)/10, total_hours: Math.round(th*10)/10 };
 }
 
 function predictRemaining(monthStr) {
@@ -550,10 +553,10 @@ function getMonthData(month) {
       if (isFutureDay) return Object.assign({}, d, {_normal:0, _ot:0});
       var edit = dEdits[r.emp_id] ? dEdits[r.emp_id][dk] : undefined;
       if (edit!==undefined) {
-        if (typeof edit==='object'&&edit!==null) return Object.assign({}, d, {_normal:edit.n, _ot:edit.o});
-        else return Object.assign({}, d, {_normal:parseFloat(edit)||0, _ot:0});
+        if (typeof edit==='object'&&edit!==null) return Object.assign({}, d, {_normal:edit.n, _lianban:edit.l||0, _ot:(edit.l||0)+edit.o});
+        else return Object.assign({}, d, {_normal:parseFloat(edit)||0, _lianban:0, _ot:0});
       }
-      return Object.assign({}, d, {_normal:typeToNormalHours(d.type), _ot:hoursToNum(d.hours)});
+      return Object.assign({}, d, {_normal:typeToNormalHours(d.type), _lianban:0, _ot:hoursToNum(d.hours)});
     });
     record.daily = newDaily;
     var totals = computeTotals(newDaily, month);
@@ -780,11 +783,12 @@ function renderRankTable() {
   data.sort((a,b)=>(parseFloat(b.total_hours)||0)-(parseFloat(a.total_hours)||0));
   document.getElementById('rankTable').innerHTML = data.map((r,i)=>{
     const totalOT=getOT(r), wd=parseFloat(r.weekday_ot)||0, we=parseFloat(r.weekend_ot)||0, ho=parseFloat(r.holiday_ot)||0;
+    const lb=parseFloat(r.lianban)||0;
     const th=parseFloat(r.total_hours)||0, effTH=getEffectiveTotal(r,month);
     let badge=effTH>OT_LIMIT?'badge-danger':effTH>OT_WARN?'badge-warn':'badge-success';
     let status=effTH>OT_LIMIT?'已超标':effTH>OT_WARN?'预警':'正常';
     const predTH=pred?th+pred.total_hours:th;
-    return `<tr><td><strong>${i+1}</strong></td><td>${r.emp_id}</td><td><strong>${r.name}</strong></td><td>${parseFloat(r.regular_hours)||0}h</td><td style="color:#e74c3c;font-weight:500;">${wd}h</td><td style="color:#f39c12;font-weight:500;">${we}h</td><td style="color:#9b59b6;font-weight:500;">${ho}h</td><td style="font-weight:700;">${totalOT.toFixed(1)}h</td><td>${th}h</td><td style="color:#7c3aed;font-weight:700;">${pred?predTH.toFixed(0):'-'}h</td><td><span class="badge ${badge}">${status}</span></td></tr>`;
+    return '<tr><td><strong>'+(i+1)+'</strong></td><td>'+r.emp_id+'</td><td><strong>'+r.name+'</strong></td><td>'+(parseFloat(r.regular_hours)||0)+'h</td><td style="color:#e67e22;font-weight:500;">'+lb+'h</td><td style="color:#e74c3c;font-weight:500;">'+wd+'h</td><td style="color:#f39c12;font-weight:500;">'+we+'h</td><td style="color:#9b59b6;font-weight:500;">'+ho+'h</td><td style="font-weight:700;">'+totalOT.toFixed(1)+'h</td><td>'+th+'h</td><td style="color:#7c3aed;font-weight:700;">'+(pred?predTH.toFixed(0):'-')+'h</td><td><span class="badge '+badge+'">'+status+'</span></td></tr>';
   }).join('');
 }
 
@@ -890,7 +894,7 @@ function doSearch() {
 
   var daily=rec.daily||[];
   var wd=parseFloat(rec.weekday_ot)||0, we=parseFloat(rec.weekend_ot)||0, ho=parseFloat(rec.holiday_ot)||0;
-  var rh=parseFloat(rec.regular_hours)||0, th=parseFloat(rec.total_hours)||0, totOT=wd+we+ho;
+  var rh=parseFloat(rec.regular_hours)||0, th=parseFloat(rec.total_hours)||0, lb=parseFloat(rec.lianban)||0, totOT=wd+we+ho;
   var pred=predictRemaining(month), effTH=pred?th+pred.total_hours:th;
   var wlS='正常',wlB='success';
   if(effTH>OT_LIMIT){wlS='已超标';wlB='danger';}else if(effTH>OT_WARN){wlS='预警中';wlB='warn';}
@@ -907,8 +911,9 @@ function doSearch() {
       var entry=null;
       for(var k=0;k<daily.length;k++){if(daily[k].day===dd){entry=daily[k];break;}}
       var normal=entry&&entry._normal!==undefined?entry._normal:0;
+      var lianban=entry&&entry._lianban!==undefined?entry._lianban:0;
       var ot=entry&&entry._ot!==undefined?entry._ot:0;
-      var total=normal+ot;
+      var total=normal+lianban+ot;
       var dow=new Date(2026,m-1,dd).getDay();
       var isWE=dow===0||dow===6;
       var bgStyle=isWE?'background:#fff7ed;':'';
@@ -917,6 +922,7 @@ function doSearch() {
       row+='<td style="'+bgStyle+'min-width:90px;padding:8px 6px;vertical-align:top;border:1px solid var(--border);">'+
         '<div style="font-size:11px;color:var(--text-secondary);margin-bottom:2px;">'+dd+'日 周'+dayNames[dow]+'</div>'+
         '<div style="font-size:12px;line-height:1.6;"><span style="'+color1+'">正常 '+normal+'h</span><br>'+
+        '<span style="color:#e67e22;">连班 '+lianban+'h</span><br>'+
         '<span style="'+color2+'">加班 '+ot+'h</span><br>'+
         '<span style="font-weight:600;color:var(--primary);">合计 '+total+'h</span></div>'+
       '</td>';
@@ -932,7 +938,8 @@ function doSearch() {
     '<span class="badge badge-'+wlB+'">'+wlS+'</span></div>'+
     '<div style="padding:16px 20px;">'+
     '<div class="quick-stats">'+
-    '<div class="quick-stat"><div class="qs-val" style="color:var(--primary);">'+rh+'h</div><div class="qs-label">正常班工时</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:var(--primary);">'+rh+'h</div><div class="qs-label">正常班</div></div>'+
+    '<div class="quick-stat"><div class="qs-val" style="color:#e67e22;">'+lb.toFixed(1)+'h</div><div class="qs-label">连班</div></div>'+
     '<div class="quick-stat"><div class="qs-val" style="color:#e74c3c;">'+totOT.toFixed(1)+'h</div><div class="qs-label">加班合计</div></div>'+
     '<div class="quick-stat"><div class="qs-val">'+th+'h</div><div class="qs-label">总工时</div></div>'+
     '<div class="quick-stat"><div class="qs-val" style="color:#e74c3c;">'+wd+'h</div><div class="qs-label" style="color:#e74c3c;">平时加班</div></div>'+
@@ -996,9 +1003,9 @@ function getTodayInMonth(monthStr) {
 }
 function getDayValues(daily, empEdits, day) {
   const dk=String(day), edit=empEdits[dk];
-  if(edit!==undefined){if(typeof edit==='object'&&edit!==null) return {n:edit.n!==undefined?edit.n:0,o:edit.o!==undefined?edit.o:0};return {n:parseFloat(edit)||0,o:0};}
-  const dd=daily.find(dd=>dd.day===day); if(!dd) return {n:'',o:''};
-  return {n:typeToNormalHours(dd.type),o:hoursToNum(dd.hours)};
+  if(edit!==undefined){if(typeof edit==='object'&&edit!==null) return {n:edit.n!==undefined?edit.n:0,l:edit.l!==undefined?edit.l:0,o:edit.o!==undefined?edit.o:0};return {n:parseFloat(edit)||0,l:0,o:0};}
+  const dd=daily.find(dd=>dd.day===day); if(!dd) return {n:'',l:'',o:''};
+  return {n:typeToNormalHours(dd.type),l:0,o:hoursToNum(dd.hours)};
 }
 
 let _autoSaveTimer = null;
@@ -1011,7 +1018,7 @@ function autoSave() {
         for (const [day, val] of Object.entries(dayMap)) {
           API.post('/api/attendance/daily-edit', {
             month: month, empId: empId, day: parseInt(day),
-            normal: val.n, ot: val.o
+            normal: val.n, lianban: val.l, ot: val.o
           }).catch(function(e){ console.warn(e); });
         }
       }
@@ -1051,16 +1058,16 @@ function renderEditableTable() {
   const numDays = data.length > 0 ? (data[0].daily || []).length : 31;
   const weekendDays = new Set(); for (let d = 1; d <= numDays; d++) { if (isWeekend(month, d)) weekendDays.add(d); }
 
-  let headerCells = '<th style="position:sticky;left:0;background:#f8f9fb;z-index:2;min-width:28px;">序</th>';
-  headerCells += '<th style="position:sticky;left:28px;background:#f8f9fb;z-index:2;min-width:62px;">工号</th>';
-  headerCells += '<th style="position:sticky;left:90px;background:#f8f9fb;z-index:2;min-width:52px;">姓名</th>';
-  if (today) headerCells += '<th style="background:#e8f0fe;color:var(--primary);text-align:center;font-size:10px;min-width:36px;">今日<br>一键</th>';
+  let headerCells = '<th style="position:sticky;left:0;background:#f8f9fb;z-index:2;min-width:32px;">序</th>';
+  headerCells += '<th style="position:sticky;left:28px;background:#f8f9fb;z-index:2;min-width:68px;">工号</th>';
+  headerCells += '<th style="position:sticky;left:90px;background:#f8f9fb;z-index:2;min-width:70px;">姓名</th>';
+  if (today) headerCells += '<th style="background:#e8f0fe;color:var(--primary);text-align:center;font-size:11px;min-width:36px;">今日<br>一键</th>';
   for (let d = 1; d <= numDays; d++) {
     const dow = getDayOfWeek(month, d), isWE = weekendDays.has(d), isToday = d === today;
     const bg = isToday ? '#e8f0fe' : (isWE ? '#fff3e0' : '');
-    headerCells += `<th style="text-align:center;min-width:42px;font-size:9px;${bg?'background:'+bg+';':''}${isToday?'color:var(--primary);font-weight:700;':''}">${d}<br><span style="color:${isWE?'#e74c3c':isToday?'var(--primary)':'var(--text-secondary)'};">${WEEKDAY_NAMES[dow]}</span><br><span style="font-size:8px;color:#aaa;">正 | 加</span></th>`;
+    headerCells += `<th style="text-align:center;min-width:52px;font-size:10px;${bg?'background:'+bg+';':''}${isToday?'color:var(--primary);font-weight:700;':''}">${d}<br><span style="color:${isWE?'#e74c3c':isToday?'var(--primary)':'var(--text-secondary)'};">${WEEKDAY_NAMES[dow]}</span><br><span style="font-size:9px;color:#888;">正/连/加</span></th>`;
   }
-  headerCells += '<th style="background:#e8f0fe;font-size:11px;">正常班</th><th style="background:#fde8e8;color:#e74c3c;font-size:11px;">平时<br>加班</th><th style="background:#fef3e2;color:#f39c12;font-size:11px;">周末<br>加班</th><th style="background:#f0e6f6;color:#9b59b6;font-size:11px;">总加班</th><th style="background:#e8f0fe;font-size:11px;">总工时</th><th style="background:#ede0f6;color:#7c3aed;font-size:11px;">🔮预测<br>总工时</th>';
+  headerCells += '<th style="background:#e8f0fe;font-size:11px;">正常班</th><th style="background:#fef5e7;color:#e67e22;font-size:11px;">连班</th><th style="background:#fde8e8;color:#e74c3c;font-size:11px;">平时<br>加班</th><th style="background:#fef3e2;color:#f39c12;font-size:11px;">周末<br>加班</th><th style="background:#f0e6f6;color:#9b59b6;font-size:11px;">总加班</th><th style="background:#e8f0fe;font-size:11px;">总工时</th><th style="background:#ede0f6;color:#7c3aed;font-size:11px;">🔮预测<br>总工时</th>';
 
   let rows = data.map((r, i) => {
     const daily = r.daily || [], empEdits = dEdits[r.emp_id] || {};
@@ -1070,26 +1077,38 @@ function renderEditableTable() {
     cells += '<td style="position:sticky;left:90px;background:#fff;z-index:1;white-space:nowrap;font-size:12px;"><strong style="cursor:pointer;" title="点击修改姓名" data-action="editName" data-empid="'+r.emp_id+'">'+r.name+'</strong>'+secTag+' <button class="btn btn-xs" data-action="delete" data-empid="'+r.emp_id+'" data-name="'+r.name+'" style="font-size:9px;padding:0 5px;margin-left:6px;color:#e74c3c;border:1px solid #e74c3c;background:#fff;" title="删除该���工">✕</button></td>';
     if (today) {
       const tv = getDayValues(daily, empEdits, today);
-      const isWorking = (typeof tv.n === 'number' && tv.n > 0) || (typeof tv.o === 'number' && tv.o > 0);
+      const isWorking = (typeof tv.n === 'number' && tv.n > 0) || (typeof tv.l === 'number' && tv.l > 0) || (typeof tv.o === 'number' && tv.o > 0);
       cells += `<td style="text-align:center;padding:2px;background:#f0f6ff;"><button class="btn btn-xs ${isWorking?'btn-success':'btn-outline'}" onclick="toggleToday('${month}','${r.emp_id}',${today})" style="font-size:9px;padding:2px 4px;white-space:nowrap;">${isWorking?'✅上班':'休息'}</button></td>`;
     }
-    const mergedDaily = daily.map(dd => { const dv = getDayValues(daily, empEdits, dd.day); const isF = today !== null && dd.day > today; return { ...dd, _normal: isF ? 0 : dv.n, _ot: isF ? 0 : dv.o }; });
+    const mergedDaily = daily.map(dd => { const dv = getDayValues(daily, empEdits, dd.day); const isF = today !== null && dd.day > today; return { ...dd, _normal: isF ? 0 : dv.n, _lianban: isF ? 0 : dv.l, _ot: isF ? 0 : (dv.l + dv.o) }; });
     const totals = computeTotals(mergedDaily, month);
     for (let d = 1; d <= numDays; d++) {
       const dv = getDayValues(daily, empEdits, d);
       const isWE = weekendDays.has(d), isToday = d === today, isFuture = today !== null && d > today;
-      const displayN = isFuture ? 0 : (dv.n === '' ? '' : dv.n), displayO = isFuture ? 0 : (dv.o === '' ? '' : dv.o);
-      let tdStyle = 'text-align:center;padding:1px;';
+      const displayN = isFuture ? 0 : (dv.n === '' ? '' : dv.n);
+      const displayL = isFuture ? 0 : (dv.l === '' ? '' : dv.l);
+      const displayO = isFuture ? 0 : (dv.o === '' ? '' : dv.o);
+      let tdStyle = 'text-align:center;padding:2px;';
       if (isToday) tdStyle += 'background:#f0f6ff;'; else if (isFuture) tdStyle += 'background:#f5f5f5;'; else if (isWE) tdStyle += 'background:#fff8f0;';
-      const inStyle = `width:38px;padding:1px 2px;font-size:10px;text-align:center;border:1px solid #e0e0e0;border-radius:2px;${isToday?'border-color:var(--primary);':''}${isFuture?'background:#eee;color:#bbb;':''}`;
-      cells += `<td style="${tdStyle}"><input type="number" step="0.5" min="0" max="24" value="${displayN}" ${isFuture?'disabled':`onchange="onDayEdit('${month}','${r.emp_id}',${d},'n',this.value)"`} style="${inStyle}color:#2c3e50;"><br><input type="number" step="0.5" min="0" max="24" value="${displayO}" ${isFuture?'disabled':`onchange="onDayEdit('${month}','${r.emp_id}',${d},'o',this.value)"`} style="${inStyle}color:#e74c3c;"></td>`;
+      const inBase = 'width:44px;padding:2px 3px;font-size:12px;text-align:center;border:1px solid #e0e0e0;border-radius:3px;';
+      const inS = inBase+(isToday?'border-color:var(--primary);':'')+(isFuture?'background:#eee;color:#bbb;':'');
+      cells += '<td style="'+tdStyle+'">';
+      // normal (top)
+      cells += '<input type="number" step="0.5" min="0" max="24" value="'+displayN+'" '+(isFuture?'disabled':'onchange="onDayEdit(\''+month+'\',\''+r.emp_id+'\', '+d+', \'n\', this.value)"')+' style="'+inS+'color:#2c3e50;">';
+      // lianban (middle) 
+      cells += '<br><input type="number" step="0.5" min="0" max="24" value="'+displayL+'" '+(isFuture?'disabled':'onchange="onDayEdit(\''+month+'\',\''+r.emp_id+'\', '+d+', \'l\', this.value)"')+' style="'+inS+'color:#e67e22;">';
+      // overtime (bottom)
+      cells += '<br><input type="number" step="0.5" min="0" max="24" value="'+displayO+'" '+(isFuture?'disabled':'onchange="onDayEdit(\''+month+'\',\''+r.emp_id+'\', '+d+', \'o\', this.value)"')+' style="'+inS+'color:#e74c3c;">';
+      cells += '</td>';
     }
     const totalOT = totals.weekday_ot + totals.weekend_ot + totals.holiday_ot;
-    cells += `<td style="text-align:center;font-weight:500;background:#f0f6ff;">${totals.regular_hours}</td>`;
-    cells += `<td style="text-align:center;font-weight:500;color:#e74c3c;background:#fff5f5;">${totals.weekday_ot}</td>`;
-    cells += `<td style="text-align:center;font-weight:500;color:#f39c12;background:#fffdf5;">${totals.weekend_ot}</td>`;
-    cells += `<td style="text-align:center;font-weight:500;color:#9b59b6;background:#fdf5ff;">${totalOT}</td>`;
-    cells += `<td style="text-align:center;font-weight:700;background:#f0f6ff;">${totals.total_hours}</td>`;
+    cells += `<td style="text-align:center;font-weight:600;font-size:13px;background:#f0f6ff;">${totals.regular_hours}</td>`;
+    var lianbanTotal = totals.lianban || 0;
+    cells += `<td style="text-align:center;font-weight:600;font-size:13px;color:#e67e22;background:#fef5e7;">${lianbanTotal}</td>`;
+    cells += `<td style="text-align:center;font-weight:600;font-size:13px;color:#e74c3c;background:#fff5f5;">${totals.weekday_ot}</td>`;
+    cells += `<td style="text-align:center;font-weight:600;font-size:13px;color:#f39c12;background:#fffdf5;">${totals.weekend_ot}</td>`;
+    cells += `<td style="text-align:center;font-weight:600;font-size:13px;color:#9b59b6;background:#fdf5ff;">${totalOT}</td>`;
+    cells += `<td style="text-align:center;font-weight:700;font-size:14px;background:#f0f6ff;">${totals.total_hours}</td>`;
     const pred = predictRemaining(month);
     cells += `<td style="text-align:center;font-weight:700;color:#7c3aed;background:#f8f0ff;">${pred ? (totals.total_hours + pred.total_hours).toFixed(0) : '-'}</td>`;
     return `<tr>${cells}</tr>`;
@@ -1125,7 +1144,7 @@ function onDayEdit(month, empId, day, field, value) {
   if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
   const dk = String(day);
   let cur = dailyEdits[month][empId][dk];
-  if (cur === undefined || typeof cur !== 'object' || cur === null) cur = { n: (typeof cur === 'number' ? cur : 0), o: 0 };
+  if (cur === undefined || typeof cur !== 'object' || cur === null) cur = { n: (typeof cur === 'number' ? cur : 0), l: 0, o: 0 };
   cur[field] = value === '' ? 0 : (parseFloat(value) || 0);
   dailyEdits[month][empId][dk] = cur;
   renderEditableTable();
@@ -1136,7 +1155,7 @@ function toggleToday(month, empId, today) {
   if (!dailyEdits[month]) dailyEdits[month] = {};
   if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
   const dk = String(today), cur = dailyEdits[month][empId][dk];
-  dailyEdits[month][empId][dk] = (cur && typeof cur === 'object' && cur.n > 0) ? { n: 0, o: 0 } : { n: 8, o: 0 };
+  dailyEdits[month][empId][dk] = (cur && typeof cur === 'object' && cur.n > 0) ? { n: 0, l: 0, o: 0 } : { n: 8, l: 0, o: 0 };
   renderEditableTable();
   autoSave();
 }
@@ -1146,7 +1165,7 @@ function batchFillToday(hours) {
   if (!today) { alert('当前选择的不是本月'); return; }
   const data = getMonthData(month);
   if (!dailyEdits[month]) dailyEdits[month] = {};
-  for (const r of data) { if (!dailyEdits[month][r.emp_id]) dailyEdits[month][r.emp_id] = {}; dailyEdits[month][r.emp_id][String(today)] = { n: hours, o: 0 }; }
+  for (const r of data) { if (!dailyEdits[month][r.emp_id]) dailyEdits[month][r.emp_id] = {}; dailyEdits[month][r.emp_id][String(today)] = { n: hours, l: 0, o: 0 }; }
   renderEditableTable(); autoSave();
   document.getElementById('editStatus').textContent = hours > 0 ? `✅ 已录入` : `❌ 已清空`;
   setTimeout(() => { document.getElementById('editStatus').textContent = ''; }, 1500);

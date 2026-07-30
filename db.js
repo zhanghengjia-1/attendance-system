@@ -112,16 +112,16 @@ async function getDailyEdits() {
   }
   return fileState.dailyEdits || {};
 }
-async function saveDailyEdit(month, empId, day, normal, ot) {
+async function saveDailyEdit(month, empId, day, normal, lianban, ot) {
   if (useDB) {
     const { rows } = await pool.query('SELECT day_data FROM daily_edits WHERE month=$1 AND emp_id=$2', [month, empId]);
     let dayData = rows.length > 0 ? rows[0].day_data : {};
-    dayData[String(day)] = { n: normal, o: ot };
+    dayData[String(day)] = { n: normal, l: lianban || 0, o: ot };
     await pool.query('INSERT INTO daily_edits (month,emp_id,day_data,updated_at) VALUES ($1,$2,$3,NOW()) ON CONFLICT (month,emp_id) DO UPDATE SET day_data=$3,updated_at=NOW()', [month, empId, JSON.stringify(dayData)]);
   } else {
     if (!fileState.dailyEdits[month]) fileState.dailyEdits[month] = {};
     if (!fileState.dailyEdits[month][empId]) fileState.dailyEdits[month][empId] = {};
-    fileState.dailyEdits[month][empId][String(day)] = { n: normal, o: ot };
+    fileState.dailyEdits[month][empId][String(day)] = { n: normal, l: lianban || 0, o: ot };
     saveFileState();
   }
 }

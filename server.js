@@ -61,9 +61,9 @@ app.post('/api/attendance/edit', async (req, res) => {
 // Save daily edits
 app.post('/api/attendance/daily-edit', async (req, res) => {
   try {
-    const { month, empId, day, normal, ot } = req.body;
+    const { month, empId, day, normal, lianban, ot } = req.body;
     if (!month || !empId || !day) return res.status(400).json({ error: 'Missing fields' });
-    await db.saveDailyEdit(month, empId, day, normal, ot);
+    await db.saveDailyEdit(month, empId, day, normal, lianban, ot);
     res.json({ success: true });
   } catch(e) {
     console.error('POST /api/attendance/daily-edit error:', e);
