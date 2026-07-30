@@ -1148,16 +1148,24 @@ function onDayEdit(month, empId, day, field, value) {
   cur[field] = value === '' ? 0 : (parseFloat(value) || 0);
   dailyEdits[month][empId][dk] = cur;
   renderEditableTable();
-  autoSave();
+  // Save immediately (no debounce)
+  API.post('/api/attendance/daily-edit', {
+    month: month, empId: empId, day: day,
+    normal: cur.n, lianban: cur.l, ot: cur.o
+  }).catch(function(e){ console.warn('Save failed:', e); });
 }
 
 function toggleToday(month, empId, today) {
   if (!dailyEdits[month]) dailyEdits[month] = {};
   if (!dailyEdits[month][empId]) dailyEdits[month][empId] = {};
   const dk = String(today), cur = dailyEdits[month][empId][dk];
-  dailyEdits[month][empId][dk] = (cur && typeof cur === 'object' && cur.n > 0) ? { n: 0, l: 0, o: 0 } : { n: 8, l: 0, o: 0 };
+  var newVal = (cur && typeof cur === 'object' && cur.n > 0) ? { n: 0, l: 0, o: 0 } : { n: 8, l: 0, o: 0 };
+  dailyEdits[month][empId][dk] = newVal;
   renderEditableTable();
-  autoSave();
+  API.post('/api/attendance/daily-edit', {
+    month: month, empId: empId, day: today,
+    normal: newVal.n, lianban: newVal.l, ot: newVal.o
+  }).catch(function(e){ console.warn('Save failed:', e); });
 }
 
 function batchFillToday(hours) {
@@ -1165,8 +1173,12 @@ function batchFillToday(hours) {
   if (!today) { alert('当前选择的不是本月'); return; }
   const data = getMonthData(month);
   if (!dailyEdits[month]) dailyEdits[month] = {};
-  for (const r of data) { if (!dailyEdits[month][r.emp_id]) dailyEdits[month][r.emp_id] = {}; dailyEdits[month][r.emp_id][String(today)] = { n: hours, l: 0, o: 0 }; }
-  renderEditableTable(); autoSave();
+  for (const r of data) {
+    if (!dailyEdits[month][r.emp_id]) dailyEdits[month][r.emp_id] = {};
+    dailyEdits[month][r.emp_id][String(today)] = { n: hours, l: 0, o: 0 };
+    API.post('/api/attendance/daily-edit', {month: month, empId: r.emp_id, day: today, normal: hours, lianban: 0, ot: 0}).catch(function(e){ console.warn(e); });
+  }
+  renderEditableTable();
   document.getElementById('editStatus').textContent = hours > 0 ? `✅ 已录入` : `❌ 已清空`;
   setTimeout(() => { document.getElementById('editStatus').textContent = ''; }, 1500);
 }
