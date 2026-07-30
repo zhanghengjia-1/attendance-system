@@ -83,7 +83,7 @@ async function main() {
       tag: 'div',
       text: {
         tag: 'lark_md',
-        content: `**📋 ${dateLabel}（周${weekday}）出勤统计**\n\n**全组**：${rows.length}人 · 正常班 ${grandN.toFixed(0)}h · 加班 ${(grandL+grandO).toFixed(0)}h · **总工时 ${(grandN+grandL+grandO).toFixed(0)}h**`
+        content: `**📋 ${dateLabel}（周${weekday}）出勤统计**\n\n**全组**：${rows.length}人 · 正常班 ${grandN.toFixed(1)}h · 加班 ${(grandL+grandO).toFixed(1)}h · **总工时 ${(grandN+grandL+grandO).toFixed(1)}h**`
       }
     },
     { tag: 'hr' }
@@ -96,18 +96,18 @@ async function main() {
       tag: 'div',
       text: {
         tag: 'lark_md',
-        content: `**【${sec}】**（${st.count}人）累计 ${st.m.toFixed(0)}h | 当天 ${st.t.toFixed(0)}h`
+        content: `**【${sec}】**（${st.count}人）累计 ${st.m.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h`
       }
     });
     const secRows = rows.filter(r => r.section === sec);
     for (const r of secRows) {
       const line = [
         pad(r.name, 8),
-        pad(r.normal > 0 ? r.normal.toString() : '-', 4),
-        pad(r.lianban > 0 ? r.lianban.toString() : '-', 4),
-        pad(r.overtime > 0 ? r.overtime.toString() : '-', 4),
-        pad(r.total.toString(), 4),
-        r.monthly > 0 ? r.monthly.toFixed(0) : '-'
+        pad(r.normal > 0 ? r.normal.toString() : '-', 5),
+        pad(r.lianban > 0 ? r.lianban.toString() : '-', 5),
+        pad(r.overtime > 0 ? r.overtime.toString() : '-', 5),
+        pad(r.total.toString(), 5),
+        r.monthly > 0 ? r.monthly.toFixed(1) : '-'
       ].join('|');
       elements.push({
         tag: 'div',
@@ -118,7 +118,7 @@ async function main() {
       tag: 'div',
       text: {
         tag: 'lark_md',
-        content: `**小计**：${st.n.toFixed(0)}h | 连班 ${st.l.toFixed(0)}h | 加班 ${st.o.toFixed(0)}h | 当天 ${st.t.toFixed(0)}h | **当月 ${st.m.toFixed(0)}h**`
+        content: `**小计**：${st.n.toFixed(1)}h | 连班 ${st.l.toFixed(1)}h | 加班 ${st.o.toFixed(1)}h | 当天 ${st.t.toFixed(1)}h | **当月 ${st.m.toFixed(1)}h**`
       }
     });
     elements.push({ tag: 'hr' });
