@@ -1147,12 +1147,14 @@ function onDayEdit(month, empId, day, field, value) {
   if (cur === undefined || typeof cur !== 'object' || cur === null) cur = { n: (typeof cur === 'number' ? cur : 0), l: 0, o: 0 };
   cur[field] = value === '' ? 0 : (parseFloat(value) || 0);
   dailyEdits[month][empId][dk] = cur;
-  renderEditableTable();
-  // Save immediately (no debounce)
+  // Save immediately (no debounce). No re-render to avoid spinner focus issues.
   API.post('/api/attendance/daily-edit', {
     month: month, empId: empId, day: day,
     normal: cur.n, lianban: cur.l, ot: cur.o
   }).catch(function(e){ console.warn('Save failed:', e); });
+  // Schedule a total re-render after 800ms of idle (debounced)
+  clearTimeout(window._editTotalTimer);
+  window._editTotalTimer = setTimeout(() => { renderEditableTable(); }, 800);
 }
 
 function toggleToday(month, empId, today) {
