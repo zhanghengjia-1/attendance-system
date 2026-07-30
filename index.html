@@ -1342,8 +1342,8 @@ function initScheduleMonth() {
   var dm = findDefaultMonth();
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
-  var hint = document.getElementById('scheduleRuleHint');
-  if (hint) hint.innerHTML = '⏱️ 规则：每周工时≤'+WEEKLY_LIMIT+'h，超限下周自动排休1天';
+      var hint = document.getElementById('scheduleRuleHint');
+  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多'+MAX_REST_PER_DAY+'人';
   renderSchedule();
 }
 
@@ -1447,9 +1447,9 @@ function renderSchedule() {
     }
   }
 
-  // ===== Group rest summary by week + 工段 =====
+  // ===== Group rest summary by exceeded week + 工段, show rest date =====
   var html = '';
-  var restByWeek = {}; // week -> { section -> [{empId, name, exceeded}] }
+  var restByWeek = {}; // week -> { section -> [{name, restDay}] }
   for (var eid in forcedRest) {
     var emp = appData.employees[eid];
     if (!emp) continue;
@@ -1459,7 +1459,7 @@ function renderSchedule() {
       var r = restList[rk];
       if (!restByWeek[r.week]) restByWeek[r.week] = {};
       if (!restByWeek[r.week][section]) restByWeek[r.week][section] = [];
-      restByWeek[r.week][section].push(emp.name);
+      restByWeek[r.week][section].push({name: emp.name, restDay: r.restDay});
     }
   }
 
@@ -1476,15 +1476,31 @@ function renderSchedule() {
       var secKeys = Object.keys(sections).sort();
       for (var si = 0; si < secKeys.length; si++) {
         var sec = secKeys[si];
-        var names = sections[sec];
+        var items = sections[sec];
+        // Group by rest day and display
+        var restDayMap = {};
+        for (var mi = 0; mi < items.length; mi++) {
+          var it = items[mi];
+          if (!restDayMap[it.restDay]) restDayMap[it.restDay] = [];
+          restDayMap[it.restDay].push(it.name);
+        }
+        var restDayKeys = Object.keys(restDayMap).map(Number).sort(function(a,b){return a-b;});
         html += '<div style="display:flex;align-items:flex-start;margin-bottom:6px;padding:8px 12px;background:#f8f9fb;border-radius:6px;">';
         html += '<span style="font-weight:600;color:#e74c3c;min-width:110px;">'+sec+'需调休：</span>';
-        html += '<span style="color:var(--text);">'+names.join('、')+'（'+names.length+'人）</span>';
+        html += '<span style="color:var(--text);">';
+        var first = true;
+        for (var ri = 0; ri < restDayKeys.length; ri++) {
+          var rd = restDayKeys[ri];
+          if (!first) html += '；';
+          first = false;
+          html += restDayMap[rd].join('、')+'→'+rd+'日休';
+        }
+        html += '（'+items.length+'人）</span>';
         html += '</div>';
       }
       html += '</div>';
     }
-    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h 标记需调休</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h，下一周工作日自动排休 1 天</div>';
     html += '</div></div>';
   }
 
