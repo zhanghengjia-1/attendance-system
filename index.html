@@ -6,7 +6,6 @@
 <title>设备组考勤管理系统 - SYRC</title>
 <script>window.CHART_LOAD_FAIL=!1;</script>
 <script src="https://cdn.bootcdn.net/ajax/libs/Chart.js/4.4.1/chart.umd.min.js" onerror="window.CHART_LOAD_FAIL=!0;console.warn('Chart.js CDN failed, retrying with backup...');var s=document.createElement('script');s.src='https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js';s.onerror=function(){window.CHART_LOAD_FAIL=!0;console.error('Chart.js all CDNs failed')};document.head.appendChild(s);"></script>
-<script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-datalabels@2.2.0/dist/chartjs-plugin-datalabels.min.js" onerror="console.warn('DataLabels CDN failed')"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
 :root {
@@ -862,18 +861,39 @@ function renderTrendChart(period) {
         { label: '平时加班', data: wdData, backgroundColor: '#e74c3c', borderRadius: 4, order: 2 },
         { label: '周末加班', data: weData, backgroundColor: '#f39c12', borderRadius: 4, order: 2 },
         { label: '节假日加班', data: hoData, backgroundColor: '#9b59b6', borderRadius: 4, order: 2 },
-        { label: '总工时', data: totalData, type: 'line', borderColor: '#2ecc71', backgroundColor: 'transparent', borderWidth: 3, pointBackgroundColor: '#2ecc71', pointRadius: 5, tension: 0.3, order: 1, datalabels: { align: 'top', anchor: 'end', color: '#2ecc71', font: { weight: 'bold', size: 12 }, offset: 2, formatter: function(v) { return v + 'h'; } } }
+        { label: '总工时', data: totalData, type: 'line', borderColor: '#2ecc71', backgroundColor: 'transparent', borderWidth: 3, pointBackgroundColor: '#2ecc71', pointRadius: 6, tension: 0.3, order: 1 }
       ]
     },
     options: {
       responsive: true, maintainAspectRatio: false,
-      plugins: {
-        legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } },
-        datalabels: { display: false } // default off; enabled only for line dataset above
-      },
+      plugins: { legend: { position: 'bottom', labels: { usePointStyle: true, padding: 20 } } },
       scales: { x: { stacked: true, grid: { display: false } }, y: { stacked: true, title: { display: true, text: '小时 (h)' }, grid: { color: '#f0f0f0' } } }
     },
-    plugins: [ChartDataLabels]
+    plugins: [{
+      id: 'totalLabels',
+      afterDraw: function(chart) {
+        var ds = chart.data.datasets;
+        var idx = -1;
+        for (var i = 0; i < ds.length; i++) { if (ds[i].label === '总工时') { idx = i; break; } }
+        if (idx < 0) return;
+        var meta = chart.getDatasetMeta(idx);
+        if (!meta || !meta.data) return;
+        var c = chart.ctx;
+        c.save();
+        c.font = 'bold 13px -apple-system, sans-serif';
+        c.textAlign = 'center';
+        c.textBaseline = 'bottom';
+        for (var i = 0; i < meta.data.length; i++) {
+          var pt = meta.data[i];
+          if (!pt || pt.hidden) continue;
+          var val = chart.data.datasets[idx].data[i];
+          if (val === undefined || val === null) continue;
+          c.fillStyle = '#2ecc71';
+          c.fillText(val + 'h', pt.x, pt.y - 7);
+        }
+        c.restore();
+      }
+    }]
   });
 }
 
