@@ -1343,7 +1343,7 @@ function initScheduleMonth() {
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
       var hint = document.getElementById('scheduleRuleHint');
-  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多'+MAX_REST_PER_DAY+'人';
+  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多 3 人';
   renderSchedule();
 }
 
