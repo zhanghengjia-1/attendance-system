@@ -5,7 +5,7 @@
  * 用法: node feishu-push.js [日期]
  */
 
-const WEBHOOK_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/30ee6979-4b58-46e6-9f96-1d45b8d78bfc';
+const WEBHOOK_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/c0fdd090-20e1-42c4-902d-5f6383228cec';
 const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 
 function getYesterday() {
