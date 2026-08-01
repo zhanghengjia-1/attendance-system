@@ -5,7 +5,7 @@
  * 用法: node feishu-push.js [日期]
  */
 
-const WEBHOOK_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/c0fdd090-20e1-42c4-902d-5f6383228cec';
+const WEBHOOK_URL = 'https://open.feishu.cn/open-apis/bot/v2/hook/1a2c6a45-a483-41d7-b464-0adabdb98964';
 const API_BASE = process.env.API_BASE || 'http://localhost:3000';
 
 function getYesterday() {
@@ -86,17 +86,23 @@ async function main() {
   // Rest schedule notification (today & tomorrow)
   var targetDayNum = targetDate.getDate();
   if (restSchedule.length > 0) {
-    var todayRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum; });
-    var tomorrowRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1; });
+    var todayWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && !r.restType; });
+    var tomorrowWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && !r.restType; });
+    var todayOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && r.restType === 'ot'; });
+    var tomorrowOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && r.restType === 'ot'; });
     var restText = '';
 
-    if (todayRest.length > 0) {
-      var todayNames = todayRest.map(function(r){ return r.name; }).join('、');
-      restText += '⚠️ **今日需下早班（'+todayRest.length+'人）**：'+todayNames+'\n';
+    if (todayWeekRest.length > 0) {
+      restText += '⚠️ **今日工时限需下早班（'+todayWeekRest.length+'人）**：'+todayWeekRest.map(function(r){return r.name;}).join('、')+'\n';
     }
-    if (tomorrowRest.length > 0) {
-      var tomorrowNames = tomorrowRest.map(function(r){ return r.name; }).join('、');
-      restText += '⚠️ **明日需下早班（'+tomorrowRest.length+'人）**：'+tomorrowNames;
+    if (todayOTRest.length > 0) {
+      restText += '⚠️ **昨日加班超4h需下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
+    }
+    if (tomorrowWeekRest.length > 0) {
+      restText += '🔔 **明日工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
+    }
+    if (tomorrowOTRest.length > 0) {
+      restText += '🔔 **今日加班超4h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
     }
 
     if (restText) {

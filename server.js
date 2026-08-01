@@ -489,6 +489,51 @@ app.get('/api/rest-schedule', async (req, res) => {
       }
     }
 
+    // ===== Overtime-based rest: yesterday > 4h overtime → rest today =====
+    // Also check today > 4h → rest tomorrow (for preview)
+    const yesterday = today - 1;
+    if (yesterday >= 1) {
+      // Get yesterday's overtime for each employee
+      const otQueue = [];
+      for (const r of data) {
+        const ydRec = r.daily.find(d => d.day === yesterday);
+        if (!ydRec) continue;
+        const ot = (ydRec._lianban || 0) + (ydRec._ot || 0);
+        if (ot > 4) {
+          otQueue.push({ empId: r.emp_id, overtime: ot, restOn: today });
+        }
+        // Check today for tomorrow
+        const tdRec = r.daily.find(d => d.day === today);
+        if (tdRec) {
+          const tdOt = (tdRec._lianban || 0) + (tdRec._ot || 0);
+          if (tdOt > 4) {
+            otQueue.push({ empId: r.emp_id, overtime: tdOt, restOn: today + 1 });
+          }
+        }
+      }
+      otQueue.sort((a, b) => b.overtime - a.overtime);
+
+      // Distribute OT rest (separate from week rest)
+      const otDayRest = {}; // section -> day -> count
+      for (const item of otQueue) {
+        const sec = getSection(item.empId, sections);
+        if (!otDayRest[sec]) otDayRest[sec] = {};
+
+        // Check if already scheduled (from week-based)
+        const alreadyHasRest = result.some(r => r.empId === item.empId && r.restDay === item.restOn);
+        if (alreadyHasRest) continue;
+
+        // Check section day limit (combine with week-based)
+        const existingCount = (dayRest[sec] && dayRest[sec][item.restOn]) || 0;
+        const otCount = (otDayRest[sec][item.restOn] || 0);
+        if (existingCount + otCount < MAX_PER_SECTION_PER_DAY) {
+          otDayRest[sec][item.restOn] = otCount + 1;
+          const name = (base.employees || {})[item.empId] ? base.employees[item.empId].name : item.empId;
+          result.push({ empId: item.empId, name, section: sec, restDay: item.restOn, restType: 'ot', overtime: item.overtime });
+        }
+      }
+    }
+
     // Filter for today and tomorrow only
     const filtered = result.filter(r => r.restDay === today || r.restDay === today + 1);
     res.json({ date: `${now.getFullYear()}-${String(monthKey).padStart(2,'0')}-${String(today).padStart(2,'0')}`, rest: filtered });
