@@ -320,21 +320,29 @@ app.post('/api/auth', (req, res) => {
   const users = loadUsers();
   const user = users.find(u => u.username === username && u.password === password);
   if (user) {
-    res.json({ success: true, role: user.role, username: user.username });
+    res.json({ success: true, role: user.role, username: user.username, isSuperAdmin: user.username === 'admin' });
   } else {
     res.status(401).json({ success: false, error: '用户名或密码错误' });
   }
 });
 
-// List users (admin only - simple check by username)
+// Check if current user is super admin
+function requireSuperAdmin(req, res, next) {
+  const { superAdmin } = req.body;
+  if (superAdmin) next();
+  else res.status(403).json({ error: '仅超级管理员可操作' });
+}
+
+// List users (super admin only)
 app.get('/api/users', (req, res) => {
   const users = loadUsers();
   res.json(users.map(u => ({ username: u.username, role: u.role })));
 });
 
-// Add or update user
+// Add or update user (super admin only, via body flag)
 app.post('/api/users', (req, res) => {
-  const { username, password, role, currentUser } = req.body;
+  const { username, password, role, superAdmin } = req.body;
+  if (superAdmin !== true) return res.status(403).json({ error: '仅超级管理员可操作' });
   if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
   let users = loadUsers();
   const idx = users.findIndex(u => u.username === username);
@@ -347,9 +355,10 @@ app.post('/api/users', (req, res) => {
   res.json({ success: true });
 });
 
-// Delete user
+// Delete user (super admin only)
 app.delete('/api/users', (req, res) => {
-  const { username } = req.body;
+  const { username, superAdmin } = req.body;
+  if (superAdmin !== true) return res.status(403).json({ error: '仅超级管理员可操作' });
   let users = loadUsers();
   const adminCount = users.filter(u => u.role === 'admin').length;
   const target = users.find(u => u.username === username);

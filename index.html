@@ -318,6 +318,7 @@ tr:hover { background: #f8f9fb; }
         <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
       </div>
       <!-- ===== User Management ===== -->
+      <div id="userManageSection" style="display:none;">
       <div class="table-card" style="margin-bottom:16px;">
         <h3>👤 账号管理</h3>
         <div style="margin-bottom:12px;"><span style="font-size:12px;color:var(--text-secondary);">当前账号：<strong id="curUserLabel"></strong></span></div>
@@ -334,6 +335,7 @@ tr:hover { background: #f8f9fb; }
           <span id="userStatus" style="font-size:12px;color:var(--primary);"></span>
         </div>
         <div id="userList"></div>
+      </div>
       </div>
       <div class="stats-row" id="waterlineStats"></div>
       <div class="filter-bar"><span style="font-weight:500;">选择月份：</span><select id="wlMonth" onchange="renderWaterline()"></select></div>
@@ -398,6 +400,7 @@ tr:hover { background: #f8f9fb; }
 <script>
 // ===================== AUTH =====================
 let isAdmin = false;
+let isSuperAdmin = false;
 let currentUser = '';
 function switchLoginTab(tab) {
   document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
@@ -419,9 +422,11 @@ async function doLogin() {
     const data = await res.json();
     if (data.success) {
       isAdmin = data.role === 'admin';
+      isSuperAdmin = data.isSuperAdmin || data.username === 'admin';
       currentUser = data.username;
       sessionStorage.setItem('attRole', data.role);
       sessionStorage.setItem('attUser', data.username);
+      sessionStorage.setItem('attSuperAdmin', isSuperAdmin ? '1' : '0');
       initApp();
     } else {
       document.getElementById('loginErr').textContent = data.error || '账号或密码错误';
@@ -1112,7 +1117,7 @@ async function addUser() {
   var r = document.getElementById('newRoleSelect').value;
   if (!u || !p) { showStatus('用户名和密码不能为空', false); return; }
   try {
-    var res = await fetch('/api/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, role:r}) });
+    var res = await fetch('/api/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, role:r, superAdmin: true}) });
     var d = await res.json();
     if (d.success) { showStatus('✅ 保存成功', true); loadUsers(); document.getElementById('newUserInput').value=''; document.getElementById('newPassInput').value=''; }
     else { showStatus(d.error, false); }
@@ -1121,7 +1126,7 @@ async function addUser() {
 async function deleteUser(username) {
   if (!confirm('确定删除用户 '+username+' 吗？')) return;
   try {
-    var res = await fetch('/api/users', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:username}) });
+    var res = await fetch('/api/users', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:username, superAdmin: true}) });
     var d = await res.json();
     if (d.success) { showStatus('✅ 已删除', true); loadUsers(); }
     else { showStatus(d.error, false); }
@@ -1139,10 +1144,13 @@ async function changePassword() {
     else { showStatus(d.error, false); }
   } catch(e) { showStatus('修改失败', false); }
 }
-// Load users when waterline page is shown
+// Load users when waterline page is shown (super admin only)
 var waterlineObserver = new MutationObserver(function(mutations) {
-  if (document.getElementById('page-waterline') && document.getElementById('page-waterline').classList.contains('active')) {
-    loadUsers();
+  var wl = document.getElementById('page-waterline');
+  if (wl && wl.classList.contains('active')) {
+    var superCheck = isSuperAdmin || sessionStorage.getItem('attSuperAdmin') === '1';
+    document.getElementById('userManageSection').style.display = superCheck ? '' : 'none';
+    if (superCheck) loadUsers();
   }
 });
 window.addEventListener('DOMContentLoaded', function() {
