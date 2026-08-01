@@ -98,7 +98,7 @@ async function main() {
     restText += '⚠️ **昨日加班超4h需下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (todayWeekRest.length === 0 && todayOTRest.length === 0) {
-    restText += '✅ **今日排休：无**\n';
+    restText += '✅ **今日下早班：无**\n';
   }
   if (tomorrowWeekRest.length > 0) {
     restText += '🔔 **明日工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
@@ -107,7 +107,7 @@ async function main() {
     restText += '🔔 **今日加班超4h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (tomorrowWeekRest.length === 0 && tomorrowOTRest.length === 0) {
-    restText += '✅ **明日排休：无**';
+    restText += '✅ **明日下早班：无**';
   }
 
   elements.push({ tag: 'div', text: { tag: 'lark_md', content: restText } });
