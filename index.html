@@ -681,12 +681,8 @@ document.querySelectorAll('.nav-item').forEach(item => {
 
 // ===================== MONTH SELECTS =====================
 function findDefaultMonth() {
-  const months = Object.keys(appData.attendance), current = getCurrentMonth();
-  if (months.includes(current)) return current;
-  const now = new Date(), curM = now.getMonth()+1;
-  const nums = months.map(m=>parseInt(m.replace('2026年','').replace('月','')));
-  const closest = nums.reduce((p,c)=>Math.abs(c-curM)<Math.abs(p-curM)?c:p);
-  return `2026年${closest}月`;
+  // Always return current month; getMonthData will auto-create if missing
+  return getCurrentMonth();
 }
 function initMonthSelects() {
   // Generate all months from existing data + current year all months
