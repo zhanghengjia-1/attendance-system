@@ -315,6 +315,8 @@ tr:hover { background: #f8f9fb; }
         <span style="font-size:12px;">h/月</span>
         <span style="margin-left:16px;font-size:12px;">周工时上限</span><input type="number" id="wlWeeklyInput" value="61" min="1" max="168" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
         <span style="font-size:12px;">h/周（超限标记调休）</span>
+        <span style="margin-left:16px;font-size:12px;">日加班超</span><input type="number" id="wlOtRestInput" value="4" min="1" max="24" step="0.5" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
+        <span style="font-size:12px;">h需下早班</span>
         <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
       </div>
       <!-- ===== User Management ===== -->
@@ -469,6 +471,7 @@ let dailyEdits = {};
 let otApplications = [];
 let OT_LIMIT = 36;
 let OT_WARN = 30;
+let OT_REST_THRESHOLD = 4; // 前一天加班超 N 小时需下早班
 let sectionAssignments = {};
 
 // Helper: get employee display name with section
@@ -677,6 +680,7 @@ async function loadData() {
   if (serverData.settings) {
     OT_LIMIT = parseFloat(serverData.settings.otLimit) || 36;
     OT_WARN = parseFloat(serverData.settings.otWarn) || 30;
+    OT_REST_THRESHOLD = parseFloat(serverData.settings.otRestThreshold) || 4;
   }
   WEEKLY_LIMIT = parseFloat(serverData.settings.weeklyLimit) || 61;
   sectionAssignments = serverData.sectionAssignments || {};
@@ -1083,10 +1087,11 @@ function updateWaterlineSettings() {
   OT_LIMIT=parseFloat(document.getElementById('wlLimitInput').value)||36;
   OT_WARN=parseFloat(document.getElementById('wlWarnInput').value)||30;
   WEEKLY_LIMIT=parseFloat(document.getElementById('wlWeeklyInput').value)||61;
+  OT_REST_THRESHOLD=parseFloat(document.getElementById('wlOtRestInput').value)||4;
   if(OT_WARN>OT_LIMIT) OT_WARN=OT_LIMIT;
-  API.post('/api/settings', {otLimit: OT_LIMIT, otWarn: OT_WARN, weeklyLimit: WEEKLY_LIMIT}).catch(function(e){ console.warn(e); });
-  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT;
-  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>';
+  API.post('/api/settings', {otLimit: OT_LIMIT, otWarn: OT_WARN, weeklyLimit: WEEKLY_LIMIT, otRestThreshold: OT_REST_THRESHOLD}).catch(function(e){ console.warn(e); });
+  document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT; document.getElementById('wlOtRestInput').value=OT_REST_THRESHOLD;
+  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>，日加班超 <strong>'+OT_REST_THRESHOLD+'h</strong>需下早班';
   document.getElementById('wlSettingsStatus').textContent='✅ 已更新';
   setTimeout(()=>{document.getElementById('wlSettingsStatus').textContent='';},2000);
   renderWaterline();
@@ -1161,7 +1166,7 @@ window.addEventListener('DOMContentLoaded', function() {
 function renderWaterline() {
   const month=document.getElementById('wlMonth').value, data=getMonthData(month);
   document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT;
-  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>';
+  document.getElementById('waterlineBanner').innerHTML='⚙️ 当前设置：超标上限 <strong>'+OT_LIMIT+'h/月</strong>，预警线 <strong>'+OT_WARN+'h/月</strong>，周工时上限 <strong>'+WEEKLY_LIMIT+'h/周</strong>，日加班超 <strong>'+OT_REST_THRESHOLD+'h</strong>需下早班';
   const tt=data.reduce((s,r)=>s+getEffectiveTotal(r,month),0);
   const ex=data.filter(r=>getEffectiveTotal(r,month)>OT_LIMIT).length;
   const wn=data.filter(r=>{const th=getEffectiveTotal(r,month);return th>OT_WARN&&th<=OT_LIMIT;}).length;
@@ -1682,7 +1687,7 @@ function initScheduleMonth() {
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
       var hint = document.getElementById('scheduleRuleHint');
-  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每工段每天最多 2 人';
+  if (hint) hint.innerHTML = '⏱️ 规则：周超'+WEEKLY_LIMIT+'h下周排休 · 日加班超'+OT_REST_THRESHOLD+'h次日下早班 · 每工段每天最多2人';
   renderSchedule();
 }
 
@@ -1800,6 +1805,33 @@ function renderSchedule() {
     }
   }
 
+  // ===== OT-based rest: 前一天加班超 OT_REST_THRESHOLD h → 今天下早班 =====
+  var today = getTodayInMonth(month);
+  if (today && today >= 2) {
+    // Check yesterday's overtime for each employee
+    for (var ei = 0; ei < data.length; ei++) {
+      var empId = data[ei].emp_id;
+      var ddaily = data[ei].daily || [];
+      var yesterdayRec = ddaily.find(function(d){ return d.day === today - 1; });
+      if (!yesterdayRec) continue;
+      var yesterdayOT = (yesterdayRec._lianban || 0) + (yesterdayRec._ot || 0);
+      if (yesterdayOT <= OT_REST_THRESHOLD) continue;
+
+      // Already has rest today from week-based?
+      var alreadyHas = forcedRest[empId] && forcedRest[empId].some(function(r){ return r.restDay === today; });
+      if (alreadyHas) continue;
+
+      // Check section limit for today
+      var sec = getSection(empId);
+      if (!dayRestCount[sec]) dayRestCount[sec] = {};
+      if ((dayRestCount[sec][today] || 0) >= 2) continue;
+
+      dayRestCount[sec][today] = (dayRestCount[sec][today] || 0) + 1;
+      if (!forcedRest[empId]) forcedRest[empId] = [];
+      forcedRest[empId].push({ week: getISOWeek(2026, m, today - 1), restDay: today, restType: 'ot' });
+    }
+  }
+
   // ===== Group rest summary by REST week + 工段 =====
   var html = '';
   var restByWeek = {}; // restWeek -> { section -> [{name, restDay, exceededWeek}] }
@@ -1854,7 +1886,7 @@ function renderSchedule() {
       }
       html += '</div>';
     }
-    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h，下一周工作日自动排休 1 天，每工段每天最多 2 人</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h下周排休，日加班超'+OT_REST_THRESHOLD+'h次日下早班，每工段每天最多2人</div>';
     html += '</div></div>';
   }
 

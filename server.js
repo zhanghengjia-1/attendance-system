@@ -404,6 +404,8 @@ app.get('/api/rest-schedule', async (req, res) => {
     const monthRecords = (base.attendance || {})[mStr] || [];
 
     const WEEKLY_LIMIT = 61, MAX_PER_SECTION_PER_DAY = 2;
+    const settings = await db.getSettings();
+    const OT_REST_THRESHOLD = parseFloat(settings.otRestThreshold) || 4;
     const data = [];
     // Build merged data like frontend
     for (const rec of monthRecords) {
@@ -499,14 +501,14 @@ app.get('/api/rest-schedule', async (req, res) => {
         const ydRec = r.daily.find(d => d.day === yesterday);
         if (!ydRec) continue;
         const ot = (ydRec._lianban || 0) + (ydRec._ot || 0);
-        if (ot > 4) {
+        if (ot > OT_REST_THRESHOLD) {
           otQueue.push({ empId: r.emp_id, overtime: ot, restOn: today });
         }
         // Check today for tomorrow
         const tdRec = r.daily.find(d => d.day === today);
         if (tdRec) {
           const tdOt = (tdRec._lianban || 0) + (tdRec._ot || 0);
-          if (tdOt > 4) {
+          if (tdOt > OT_REST_THRESHOLD) {
             otQueue.push({ empId: r.emp_id, overtime: tdOt, restOn: today + 1 });
           }
         }
