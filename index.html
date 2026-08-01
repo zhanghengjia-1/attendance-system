@@ -1682,7 +1682,7 @@ function initScheduleMonth() {
   sel.innerHTML = allMonths.map(function(m){ return '<option value="'+m+'">'+m.replace(curYear+'年','')+'</option>'; }).join('');
   sel.value = dm;
       var hint = document.getElementById('scheduleRuleHint');
-  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每天最多 2 人';
+  if (hint) hint.innerHTML = '⏱️ 规则：ISO周超'+WEEKLY_LIMIT+'h，下一周（周一至周六）自动排休1天，每工段每天最多 2 人';
   renderSchedule();
 }
 
@@ -1725,9 +1725,9 @@ function renderSchedule() {
   var today = new Date();
   var todayStr = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
 
-  // Calculate forced rest: if week > 61h, distribute rest across next week Mon-Sat, max 3/day
+  // Calculate forced rest: if week > 61h, distribute rest across next week Mon-Sat, max 2/工段/天
   var forcedRest = {};
-  var dayRestCount = {}; // day -> count of people resting
+  var dayRestCount = {}; // section -> day -> count
   // First pass: collect all employees that need rest, sorted by exceeded amount (most first)
   var restQueue = [];
   for (var ri = 0; ri < data.length; ri++) {
@@ -1754,11 +1754,13 @@ function renderSchedule() {
   // Sort by exceeded amount descending (most overtime gets priority)
   restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
 
-  // Distribute rest days: assign each person to the next available Mon-Sat (max 3/day)
+  // Distribute rest days: assign each person to the next available Mon-Sat (max 2/工段/天)
   var MAX_REST_PER_DAY = 2;
   for (var qi = 0; qi < restQueue.length; qi++) {
     var item = restQueue[qi];
     if (!forcedRest[item.empId]) forcedRest[item.empId] = [];
+    var section = getSection(item.empId) || '未分组';
+    if (!dayRestCount[section]) dayRestCount[section] = {};
 
     // Find all eligible Mon-Sat days in next ISO week
     var candidates = [];
@@ -1773,13 +1775,13 @@ function renderSchedule() {
       if (getISOWeek(2026, m, dd) > item.week + 1) break;
     }
 
-    // Pick the first candidate day with < MAX_REST_PER_DAY rest assignments
+    // Pick the first candidate day with < MAX_REST_PER_DAY rest for this section
     var assigned = false;
     for (var ci = 0; ci < candidates.length; ci++) {
       var cd = candidates[ci];
-      var count = dayRestCount[cd] || 0;
+      var count = dayRestCount[section][cd] || 0;
       if (count < MAX_REST_PER_DAY) {
-        dayRestCount[cd] = count + 1;
+        dayRestCount[section][cd] = count + 1;
         forcedRest[item.empId].push({ week: item.week, restDay: cd, exceeded: item.exceeded });
         assigned = true;
         break;
@@ -1787,12 +1789,13 @@ function renderSchedule() {
     }
     // If all candidates are full, pick the one with the least count
     if (!assigned && candidates.length > 0) {
-      var bestDay = candidates[0], bestCount = dayRestCount[candidates[0]] || 0;
+      var bestDay = candidates[0], bestCount = dayRestCount[section][candidates[0]] || 0;
       for (var ci = 1; ci < candidates.length; ci++) {
-        var cc = dayRestCount[candidates[ci]] || 0;
+        var cc = dayRestCount[section][candidates[ci]] || 0;
         if (cc < bestCount) { bestCount = cc; bestDay = candidates[ci]; }
       }
-      dayRestCount[bestDay] = (dayRestCount[bestDay] || 0) + 1;
+      if (!dayRestCount[section][bestDay]) dayRestCount[section][bestDay] = 0;
+      dayRestCount[section][bestDay] += 1;
       forcedRest[item.empId].push({ week: item.week, restDay: bestDay, exceeded: item.exceeded });
     }
   }
@@ -1851,7 +1854,7 @@ function renderSchedule() {
       }
       html += '</div>';
     }
-    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h，下一周工作日自动排休 1 天</div>';
+    html += '<div style="font-size:12px;color:var(--text-secondary);margin-top:8px;">⏱️ 规则：ISO周（周一~周日）总工时 > '+WEEKLY_LIMIT+'h，下一周工作日自动排休 1 天，每工段每天最多 2 人</div>';
     html += '</div></div>';
   }
 
