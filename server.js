@@ -298,6 +298,79 @@ app.post('/api/sections', async (req, res) => {
   }
 });
 
+// ===================== Auth & User Management =====================
+
+const USERS_FILE = path.join(__dirname, 'users.json');
+
+function loadUsers() {
+  try {
+    return JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
+  } catch(e) {
+    // Default: one admin user
+    return [{ username: 'admin', password: 'admin123', role: 'admin' }];
+  }
+}
+function saveUsers(users) {
+  fs.writeFileSync(USERS_FILE, JSON.stringify(users, null, 2));
+}
+
+// Login
+app.post('/api/auth', (req, res) => {
+  const { username, password } = req.body;
+  const users = loadUsers();
+  const user = users.find(u => u.username === username && u.password === password);
+  if (user) {
+    res.json({ success: true, role: user.role, username: user.username });
+  } else {
+    res.status(401).json({ success: false, error: '用户名或密码错误' });
+  }
+});
+
+// List users (admin only - simple check by username)
+app.get('/api/users', (req, res) => {
+  const users = loadUsers();
+  res.json(users.map(u => ({ username: u.username, role: u.role })));
+});
+
+// Add or update user
+app.post('/api/users', (req, res) => {
+  const { username, password, role, currentUser } = req.body;
+  if (!username || !password) return res.status(400).json({ error: '用户名和密码不能为空' });
+  let users = loadUsers();
+  const idx = users.findIndex(u => u.username === username);
+  if (idx >= 0) {
+    users[idx] = { username, password, role: role || 'user' };
+  } else {
+    users.push({ username, password, role: role || 'user' });
+  }
+  saveUsers(users);
+  res.json({ success: true });
+});
+
+// Delete user
+app.delete('/api/users', (req, res) => {
+  const { username } = req.body;
+  let users = loadUsers();
+  const adminCount = users.filter(u => u.role === 'admin').length;
+  const target = users.find(u => u.username === username);
+  if (!target) return res.status(404).json({ error: '用户不存在' });
+  if (target.role === 'admin' && adminCount <= 1) return res.status(400).json({ error: '最后一个管理员不能删除' });
+  users = users.filter(u => u.username !== username);
+  saveUsers(users);
+  res.json({ success: true });
+});
+
+// Change own password
+app.post('/api/users/change-password', (req, res) => {
+  const { username, oldPassword, newPassword } = req.body;
+  let users = loadUsers();
+  const user = users.find(u => u.username === username && u.password === oldPassword);
+  if (!user) return res.status(401).json({ error: '原密码错误' });
+  user.password = newPassword;
+  saveUsers(users);
+  res.json({ success: true });
+});
+
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 

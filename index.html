@@ -317,6 +317,24 @@ tr:hover { background: #f8f9fb; }
         <span style="font-size:12px;">h/周（超限标记调休）</span>
         <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
       </div>
+      <!-- ===== User Management ===== -->
+      <div class="table-card" style="margin-bottom:16px;">
+        <h3>👤 账号管理</h3>
+        <div style="margin-bottom:12px;"><span style="font-size:12px;color:var(--text-secondary);">当前账号：<strong id="curUserLabel"></strong></span></div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <div><label style="font-size:12px;display:block;">用户名</label><input id="newUserInput" placeholder="新用户名" style="width:100px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>
+          <div><label style="font-size:12px;display:block;">密码</label><input id="newPassInput" type="password" placeholder="密码" style="width:100px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>
+          <div><label style="font-size:12px;display:block;">角色</label><select id="newRoleSelect" style="width:80px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;"><option value="user">用户</option><option value="admin">管理员</option></select></div>
+          <button class="btn btn-primary btn-sm" onclick="addUser()" style="height:30px;">添加/更新</button>
+        </div>
+        <div style="display:flex;gap:8px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px;">
+          <div><label style="font-size:12px;display:block;">原密码</label><input id="oldPassInput" type="password" style="width:100px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>
+          <div><label style="font-size:12px;display:block;">新密码</label><input id="newPass2Input" type="password" style="width:100px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;"></div>
+          <button class="btn btn-outline btn-sm" onclick="changePassword()" style="height:30px;">修改密码</button>
+          <span id="userStatus" style="font-size:12px;color:var(--primary);"></span>
+        </div>
+        <div id="userList"></div>
+      </div>
       <div class="stats-row" id="waterlineStats"></div>
       <div class="filter-bar"><span style="font-weight:500;">选择月份：</span><select id="wlMonth" onchange="renderWaterline()"></select></div>
       <h3 style="font-size:15px;font-weight:600;margin:16px 0 12px;">👥 员工加班水位监控</h3>
@@ -380,6 +398,7 @@ tr:hover { background: #f8f9fb; }
 <script>
 // ===================== AUTH =====================
 let isAdmin = false;
+let currentUser = '';
 function switchLoginTab(tab) {
   document.querySelectorAll('.login-tab').forEach(t => t.classList.remove('active'));
   document.getElementById('tab' + (tab === 'admin' ? 'Admin' : 'Tech')).classList.add('active');
@@ -387,14 +406,29 @@ function switchLoginTab(tab) {
   document.getElementById('techFields').style.display = tab === 'tech' ? '' : 'none';
   document.getElementById('loginErr').style.display = 'none';
 }
-function doLogin() {
+async function doLogin() {
   const u = document.getElementById('loginUser').value.trim();
   const p = document.getElementById('loginPass').value;
-  if (u === 'admin' && p === 'admin123') {
-    isAdmin = true;
-    sessionStorage.setItem('attRole', 'admin');
-    initApp();
-  } else {
+  if (!u || !p) return;
+  try {
+    const res = await fetch('/api/auth', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ username: u, password: p })
+    });
+    const data = await res.json();
+    if (data.success) {
+      isAdmin = data.role === 'admin';
+      currentUser = data.username;
+      sessionStorage.setItem('attRole', data.role);
+      sessionStorage.setItem('attUser', data.username);
+      initApp();
+    } else {
+      document.getElementById('loginErr').textContent = data.error || '账号或密码错误';
+      document.getElementById('loginErr').style.display = 'block';
+    }
+  } catch(e) {
+    document.getElementById('loginErr').textContent = '登录失败，请检查服务器连接';
     document.getElementById('loginErr').style.display = 'block';
   }
 }
@@ -1052,6 +1086,70 @@ function updateWaterlineSettings() {
   setTimeout(()=>{document.getElementById('wlSettingsStatus').textContent='';},2000);
   renderWaterline();
 }
+// ===== User Management =====
+function showStatus(msg, ok) {
+  var el = document.getElementById('userStatus');
+  el.textContent = msg; el.style.color = ok ? '#27ae60' : '#e74c3c';
+  setTimeout(function(){ el.textContent = ''; }, 3000);
+}
+async function loadUsers() {
+  try {
+    var res = await fetch('/api/users');
+    var users = await res.json();
+    document.getElementById('curUserLabel').textContent = currentUser || sessionStorage.getItem('attUser') || '';
+    var html = '<table style="font-size:12px;width:100%;border-collapse:collapse;"><tr><th style="padding:4px 8px;border-bottom:1px solid var(--border);text-align:left;">用户</th><th style="padding:4px 8px;border-bottom:1px solid var(--border);">角色</th><th style="padding:4px 8px;border-bottom:1px solid var(--border);">操作</th></tr>';
+    for (var i = 0; i < users.length; i++) {
+      var u = users[i];
+      html += '<tr><td style="padding:4px 8px;">'+u.username+'</td><td style="padding:4px 8px;text-align:center;">'+(u.role==='admin'?'🔐 管理员':'👤 用户')+'</td><td style="padding:4px 8px;text-align:center;"><button class="btn btn-xs btn-danger" onclick="deleteUser(\''+u.username+'\')">删除</button></td></tr>';
+    }
+    html += '</table>';
+    document.getElementById('userList').innerHTML = html;
+  } catch(e) { console.warn(e); }
+}
+async function addUser() {
+  var u = document.getElementById('newUserInput').value.trim();
+  var p = document.getElementById('newPassInput').value;
+  var r = document.getElementById('newRoleSelect').value;
+  if (!u || !p) { showStatus('用户名和密码不能为空', false); return; }
+  try {
+    var res = await fetch('/api/users', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:u, password:p, role:r}) });
+    var d = await res.json();
+    if (d.success) { showStatus('✅ 保存成功', true); loadUsers(); document.getElementById('newUserInput').value=''; document.getElementById('newPassInput').value=''; }
+    else { showStatus(d.error, false); }
+  } catch(e) { showStatus('保存失败', false); }
+}
+async function deleteUser(username) {
+  if (!confirm('确定删除用户 '+username+' 吗？')) return;
+  try {
+    var res = await fetch('/api/users', { method: 'DELETE', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:username}) });
+    var d = await res.json();
+    if (d.success) { showStatus('✅ 已删除', true); loadUsers(); }
+    else { showStatus(d.error, false); }
+  } catch(e) { showStatus('删除失败', false); }
+}
+async function changePassword() {
+  var oldP = document.getElementById('oldPassInput').value;
+  var newP = document.getElementById('newPass2Input').value;
+  if (!oldP || !newP) { showStatus('请输入原密码和新密码', false); return; }
+  var cu = currentUser || sessionStorage.getItem('attUser');
+  try {
+    var res = await fetch('/api/users/change-password', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({username:cu, oldPassword:oldP, newPassword:newP}) });
+    var d = await res.json();
+    if (d.success) { showStatus('✅ 密码已修改', true); document.getElementById('oldPassInput').value=''; document.getElementById('newPass2Input').value=''; }
+    else { showStatus(d.error, false); }
+  } catch(e) { showStatus('修改失败', false); }
+}
+// Load users when waterline page is shown
+var waterlineObserver = new MutationObserver(function(mutations) {
+  if (document.getElementById('page-waterline') && document.getElementById('page-waterline').classList.contains('active')) {
+    loadUsers();
+  }
+});
+window.addEventListener('DOMContentLoaded', function() {
+  var wl = document.getElementById('page-waterline');
+  if (wl) waterlineObserver.observe(wl, { attributes: true, attributeFilter: ['class'] });
+});
+
 function renderWaterline() {
   const month=document.getElementById('wlMonth').value, data=getMonthData(month);
   document.getElementById('wlLimitInput').value=OT_LIMIT; document.getElementById('wlWarnInput').value=OT_WARN; document.getElementById('wlWeeklyInput').value=WEEKLY_LIMIT;
