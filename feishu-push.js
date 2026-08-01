@@ -85,31 +85,33 @@ async function main() {
 
   // Rest schedule notification (today & tomorrow)
   var targetDayNum = targetDate.getDate();
-  if (restSchedule.length > 0) {
-    var todayWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && !r.restType; });
-    var tomorrowWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && !r.restType; });
-    var todayOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && r.restType === 'ot'; });
-    var tomorrowOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && r.restType === 'ot'; });
-    var restText = '';
+  var todayWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && !r.restType; });
+  var tomorrowWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && !r.restType; });
+  var todayOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && r.restType === 'ot'; });
+  var tomorrowOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && r.restType === 'ot'; });
+  var restText = '';
 
-    if (todayWeekRest.length > 0) {
-      restText += '⚠️ **今日工时限需下早班（'+todayWeekRest.length+'人）**：'+todayWeekRest.map(function(r){return r.name;}).join('、')+'\n';
-    }
-    if (todayOTRest.length > 0) {
-      restText += '⚠️ **昨日加班超4h需下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
-    }
-    if (tomorrowWeekRest.length > 0) {
-      restText += '🔔 **明日工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
-    }
-    if (tomorrowOTRest.length > 0) {
-      restText += '🔔 **今日加班超4h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
-    }
-
-    if (restText) {
-      elements.push({ tag: 'div', text: { tag: 'lark_md', content: restText } });
-      elements.push({ tag: 'hr' });
-    }
+  if (todayWeekRest.length > 0) {
+    restText += '⚠️ **今日工时限需下早班（'+todayWeekRest.length+'人）**：'+todayWeekRest.map(function(r){return r.name;}).join('、')+'\n';
   }
+  if (todayOTRest.length > 0) {
+    restText += '⚠️ **昨日加班超4h需下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
+  }
+  if (todayWeekRest.length === 0 && todayOTRest.length === 0) {
+    restText += '✅ **今日排休：无**\n';
+  }
+  if (tomorrowWeekRest.length > 0) {
+    restText += '🔔 **明日工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
+  }
+  if (tomorrowOTRest.length > 0) {
+    restText += '🔔 **今日加班超4h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
+  }
+  if (tomorrowWeekRest.length === 0 && tomorrowOTRest.length === 0) {
+    restText += '✅ **明日排休：无**';
+  }
+
+  elements.push({ tag: 'div', text: { tag: 'lark_md', content: restText } });
+  elements.push({ tag: 'hr' });
 
   for (const sec of sectionOrder.concat(['未分组'])) {
     if (!sectionTotals[sec]) continue;
