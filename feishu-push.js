@@ -39,6 +39,16 @@ async function main() {
     return;
   }
 
+  // 2. Fetch rest schedule
+  let restSchedule = [];
+  try {
+    const restRes = await fetch(`${API_BASE}/api/rest-schedule`);
+    if (restRes.ok) {
+      const restData = await restRes.json();
+      restSchedule = restData.rest || [];
+    }
+  } catch(e) { console.warn('获取调休数据失败:', e.message); }
+
   const sectionOrder = ['模组','整机','2.5前加工','库房','测包','立库'];
   rows.sort((a, b) => {
     const ia = sectionOrder.indexOf(a.section), ib = sectionOrder.indexOf(b.section);
@@ -72,6 +82,28 @@ async function main() {
     text: { tag: 'lark_md', content: `全组 ${rows.length}人 · 正常 ${grandN.toFixed(1)}h · 加班 ${(grandL+grandO).toFixed(1)}h · **总工时 ${(grandN+grandL+grandO).toFixed(1)}h**` }
   });
   elements.push({ tag: 'hr' });
+
+  // Rest schedule notification (today & tomorrow)
+  var targetDayNum = targetDate.getDate();
+  if (restSchedule.length > 0) {
+    var todayRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum; });
+    var tomorrowRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1; });
+    var restText = '';
+
+    if (todayRest.length > 0) {
+      var todayNames = todayRest.map(function(r){ return r.name; }).join('、');
+      restText += '⚠️ **今日需下早班（'+todayRest.length+'人）**：'+todayNames+'\n';
+    }
+    if (tomorrowRest.length > 0) {
+      var tomorrowNames = tomorrowRest.map(function(r){ return r.name; }).join('、');
+      restText += '⚠️ **明日需下早班（'+tomorrowRest.length+'人）**：'+tomorrowNames;
+    }
+
+    if (restText) {
+      elements.push({ tag: 'div', text: { tag: 'lark_md', content: restText } });
+      elements.push({ tag: 'hr' });
+    }
+  }
 
   for (const sec of sectionOrder.concat(['未分组'])) {
     if (!sectionTotals[sec]) continue;

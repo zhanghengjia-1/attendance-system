@@ -380,6 +380,124 @@ app.post('/api/users/change-password', (req, res) => {
   res.json({ success: true });
 });
 
+// ===== Rest Schedule (for Feishu notification) =====
+function getISOWeek(y, m, d) {
+  const dt = new Date(y, m-1, d);
+  const dayNum = dt.getUTCDay() || 7;
+  dt.setUTCDate(dt.getUTCDate() + 4 - dayNum);
+  const yearStart = new Date(Date.UTC(dt.getUTCFullYear(), 0, 1));
+  return Math.ceil(((dt - yearStart) / 86400000 + 1) / 7);
+}
+function getSection(empId, sections) { return sections[empId] || '未分组'; }
+
+app.get('/api/rest-schedule', async (req, res) => {
+  try {
+    const now = new Date();
+    const today = now.getDate();
+    const mStr = `${now.getFullYear()}年${now.getMonth()+1}月`;
+    const monthKey = now.getMonth() + 1;
+    const lastDay = new Date(now.getFullYear(), monthKey, 0).getDate();
+
+    const base = loadBaseData();
+    const [dailyEdits, sections] = await Promise.all([db.getDailyEdits(), db.getSectionAssignments()]);
+    const monthEdits = (dailyEdits || {})[mStr] || {};
+    const monthRecords = (base.attendance || {})[mStr] || [];
+
+    const WEEKLY_LIMIT = 61, MAX_PER_SECTION_PER_DAY = 2;
+    const data = [];
+    // Build merged data like frontend
+    for (const rec of monthRecords) {
+      const empEdits = monthEdits[rec.emp_id] || {};
+      const daily = (rec.daily || []).map(dd => {
+        const dk = String(dd.day);
+        const edit = empEdits[dk];
+        if (edit) {
+          if (typeof edit === 'object') return { day: dd.day, _normal: parseFloat(edit.n)||0, _lianban: parseFloat(edit.l)||0, _ot: parseFloat(edit.o)||0 };
+          return { day: dd.day, _normal: parseFloat(edit)||0, _lianban: 0, _ot: 0 };
+        }
+        return { day: dd.day, _normal: computeNormal(dd.type), _lianban: 0, _ot: hoursToNum(dd.hours) };
+      });
+      data.push({ emp_id: rec.emp_id, daily: daily });
+    }
+
+    // Compute week hours
+    const weekHours = {};
+    for (const r of data) {
+      for (const d of r.daily) {
+        if (d.day > today) break;
+        const w = getISOWeek(2026, monthKey, d.day);
+        if (!weekHours[w]) weekHours[w] = {};
+        if (!weekHours[w][r.emp_id]) weekHours[w][r.emp_id] = 0;
+        weekHours[w][r.emp_id] += (d._normal||0) + (d._lianban||0) + (d._ot||0);
+      }
+    }
+
+    // Find first week of month (skip it)
+    const firstWeek = getISOWeek(2026, monthKey, 1);
+
+    // Distribute rest
+    const dayRest = {}; // section -> day -> count
+    const result = [];
+
+    const weekNums = Object.keys(weekHours).map(Number).sort((a,b)=>a-b);
+    for (const wk of weekNums) {
+      if (wk === firstWeek) continue;
+
+      const restQueue = [];
+      for (const empId in weekHours[wk]) {
+        if (weekHours[wk][empId] > WEEKLY_LIMIT) {
+          restQueue.push({ empId, week: wk, exceeded: weekHours[wk][empId] });
+        }
+      }
+      restQueue.sort((a,b)=>b.exceeded-a.exceeded);
+
+      for (const item of restQueue) {
+        const sec = getSection(item.empId, sections);
+        if (!dayRest[sec]) dayRest[sec] = {};
+
+        // Find days in next ISO week (Mon-Sat)
+        const candidates = [];
+        for (let d = 1; d <= lastDay; d++) {
+          if (getISOWeek(2026, monthKey, d) === item.week + 1) {
+            const dow = new Date(2026, monthKey-1, d).getDay();
+            if (dow !== 0) candidates.push(d);
+          }
+          if (getISOWeek(2026, monthKey, d) > item.week + 1) break;
+        }
+
+        let assigned = false;
+        for (const cd of candidates) {
+          const cnt = dayRest[sec][cd] || 0;
+          if (cnt < MAX_PER_SECTION_PER_DAY) {
+            dayRest[sec][cd] = cnt + 1;
+            const name = (base.employees || {})[item.empId] ? base.employees[item.empId].name : item.empId;
+            result.push({ empId: item.empId, name, section: sec, restDay: cd, week: item.week });
+            assigned = true;
+            break;
+          }
+        }
+        if (!assigned && candidates.length > 0) {
+          let bestDay = candidates[0], bestCnt = dayRest[sec][candidates[0]] || 0;
+          for (let ci = 1; ci < candidates.length; ci++) {
+            const cc = dayRest[sec][candidates[ci]] || 0;
+            if (cc < bestCnt) { bestCnt = cc; bestDay = candidates[ci]; }
+          }
+          dayRest[sec][bestDay] = (dayRest[sec][bestDay]||0)+1;
+          const name = (base.employees || {})[item.empId] ? base.employees[item.empId].name : item.empId;
+          result.push({ empId: item.empId, name, section: sec, restDay: bestDay, week: item.week });
+        }
+      }
+    }
+
+    // Filter for today and tomorrow only
+    const filtered = result.filter(r => r.restDay === today || r.restDay === today + 1);
+    res.json({ date: `${now.getFullYear()}-${String(monthKey).padStart(2,'0')}-${String(today).padStart(2,'0')}`, rest: filtered });
+  } catch(e) {
+    console.error('GET /api/rest-schedule error:', e);
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
