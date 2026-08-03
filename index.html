@@ -1805,18 +1805,20 @@ function renderSchedule() {
     }
   }
 
-  // ===== OT-based rest: 前一天加班超 OT_REST_THRESHOLD h → 下早班（周六→周一，跳过周日）=====
+  // ===== OT-based rest: 前一天加班超 OT_REST_THRESHOLD h → 下早班（周六→周一）=====
   var today = getTodayInMonth(month);
   if (today && today >= 2) {
+    // Monday: check Saturday (skip Sunday)
+    var yesterdayDay = (new Date(2026, m-1, today).getDay() === 1) ? today - 2 : today - 1;
+    if (yesterdayDay >= 1) {
     for (var ei = 0; ei < data.length; ei++) {
       var empId = data[ei].emp_id;
       var ddaily = data[ei].daily || [];
-      var yesterdayRec = ddaily.find(function(d){ return d.day === today - 1; });
+      var yesterdayRec = ddaily.find(function(d){ return d.day === yesterdayDay; });
       if (!yesterdayRec) continue;
       var yesterdayOT = (yesterdayRec._lianban || 0) + (yesterdayRec._ot || 0);
       if (yesterdayOT <= OT_REST_THRESHOLD) continue;
 
-      // Saturday OT → rest on Monday
       var restDay = today;
       var restDOW = new Date(2026, m-1, restDay).getDay();
       if (restDOW === 0) restDay = today + 1; // Sunday -> Monday
@@ -1830,7 +1832,8 @@ function renderSchedule() {
 
       dayRestCount[sec][restDay] = (dayRestCount[sec][restDay] || 0) + 1;
       if (!forcedRest[empId]) forcedRest[empId] = [];
-      forcedRest[empId].push({ week: getISOWeek(2026, m, today - 1), restDay: restDay, restType: 'ot' });
+      forcedRest[empId].push({ week: getISOWeek(2026, m, yesterdayDay), restDay: restDay, restType: 'ot' });
+    }
     }
   }
 

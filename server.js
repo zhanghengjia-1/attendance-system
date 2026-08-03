@@ -525,31 +525,30 @@ app.get('/api/rest-schedule', async (req, res) => {
       }
     }
 
-    // ===== Overtime-based rest: yesterday > 4h overtime → rest today =====
-    // Also check today > 4h → rest tomorrow (for preview)
-    const yesterday = today - 1;
+    // ===== Overtime-based rest: 前一天加班 > OT_REST_THRESHOLD → 下早班 =====
+    // Monday checks Saturday (skip Sunday)
+    const todayDOW = new Date(now.getFullYear(), monthKey-1, today).getDay();
+    const yesterday = todayDOW === 1 ? today - 2 : today - 1;
     if (yesterday >= 1) {
-      // Get yesterday's overtime for each employee
       const otQueue = [];
       for (const r of data) {
         const ydRec = r.daily.find(d => d.day === yesterday);
         if (!ydRec) continue;
         const ot = (ydRec._lianban || 0) + (ydRec._ot || 0);
         if (ot > OT_REST_THRESHOLD) {
-          // Saturday OT rest pushes to Monday (skip Sunday rest day)
           let restOn = today;
           let restDOW = new Date(now.getFullYear(), monthKey-1, restOn).getDay();
-          if (restDOW === 0) restOn = today + 1; // Sunday -> Monday
+          if (restDOW === 0) restOn = today + 1;
           otQueue.push({ empId: r.emp_id, overtime: ot, restOn: restOn });
         }
-        // Check today for tomorrow
+        // Also check today for tomorrow's preview
         const tdRec = r.daily.find(d => d.day === today);
         if (tdRec) {
           const tdOt = (tdRec._lianban || 0) + (tdRec._ot || 0);
           if (tdOt > OT_REST_THRESHOLD) {
             let restOn2 = today + 1;
             let restDOW2 = new Date(now.getFullYear(), monthKey-1, restOn2).getDay();
-            if (restDOW2 === 0) restOn2 = today + 2; // Sunday -> Monday
+            if (restDOW2 === 0) restOn2 = today + 2;
             otQueue.push({ empId: r.emp_id, overtime: tdOt, restOn: restOn2 });
           }
         }
