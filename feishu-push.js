@@ -40,12 +40,14 @@ async function main() {
   }
 
   // 2. Fetch rest schedule
-  let restSchedule = [];
+  var restSchedule = [];
+  var otThreshold = 4;
   try {
-    const restRes = await fetch(`${API_BASE}/api/rest-schedule`);
+    var restRes = await fetch(API_BASE + '/api/rest-schedule');
     if (restRes.ok) {
-      const restData = await restRes.json();
+      var restData = await restRes.json();
       restSchedule = restData.rest || [];
+      if (restData.otRestThreshold) otThreshold = restData.otRestThreshold;
     }
   } catch(e) { console.warn('获取调休数据失败:', e.message); }
 
@@ -83,28 +85,30 @@ async function main() {
   });
   elements.push({ tag: 'hr' });
 
-  // Rest schedule notification (today & tomorrow)
-  var targetDayNum = targetDate.getDate();
-  var todayWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && !r.restType; });
-  var tomorrowWeekRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && !r.restType; });
-  var todayOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum && r.restType === 'ot'; });
-  var tomorrowOTRest = restSchedule.filter(function(r){ return r.restDay === targetDayNum + 1 && r.restType === 'ot'; });
+  // Rest schedule notification (real today and tomorrow)
+  var realToday = new Date();
+  var realTodayNum = realToday.getDate();
+  var tomorrowNum = realTodayNum + 1;
+  var todayWeekRest = restSchedule.filter(function(r){ return r.restDay === realTodayNum && !r.restType; });
+  var tomorrowWeekRest = restSchedule.filter(function(r){ return r.restDay === tomorrowNum && !r.restType; });
+  var todayOTRest = restSchedule.filter(function(r){ return r.restDay === realTodayNum && r.restType === 'ot'; });
+  var tomorrowOTRest = restSchedule.filter(function(r){ return r.restDay === tomorrowNum && r.restType === 'ot'; });
   var restText = '';
 
   if (todayWeekRest.length > 0) {
-    restText += '⚠️ **今日工时限需下早班（'+todayWeekRest.length+'人）**：'+todayWeekRest.map(function(r){return r.name;}).join('、')+'\n';
+    restText += '⚠️ **今日('+realTodayNum+'日)工时限需下早班（'+todayWeekRest.length+'人）**：'+todayWeekRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (todayOTRest.length > 0) {
-    restText += '⚠️ **昨日加班超4h需下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
+    restText += '⚠️ **前日加班超'+otThreshold+'h今日下早班（'+todayOTRest.length+'人）**：'+todayOTRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (todayWeekRest.length === 0 && todayOTRest.length === 0) {
     restText += '✅ **今日下早班：无**\n';
   }
   if (tomorrowWeekRest.length > 0) {
-    restText += '🔔 **明日工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
+    restText += '🔔 **明日('+tomorrowNum+'日)工时限需下早班（'+tomorrowWeekRest.length+'人）**：'+tomorrowWeekRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (tomorrowOTRest.length > 0) {
-    restText += '🔔 **今日加班超4h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
+    restText += '🔔 **今日加班超'+otThreshold+'h明需下早班（'+tomorrowOTRest.length+'人）**：'+tomorrowOTRest.map(function(r){return r.name;}).join('、')+'\n';
   }
   if (tomorrowWeekRest.length === 0 && tomorrowOTRest.length === 0) {
     restText += '✅ **明日下早班：无**';

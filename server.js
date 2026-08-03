@@ -592,7 +592,7 @@ app.get('/api/rest-schedule', async (req, res) => {
 
     // Filter for today and tomorrow only
     const filtered = result.filter(r => r.restDay === today || r.restDay === today + 1);
-    res.json({ date: `${now.getFullYear()}-${String(monthKey).padStart(2,'0')}-${String(today).padStart(2,'0')}`, rest: filtered });
+    res.json({ date: `${now.getFullYear()}-${String(monthKey).padStart(2,'0')}-${String(today).padStart(2,'0')}`, rest: filtered, otRestThreshold: OT_REST_THRESHOLD });
   } catch(e) {
     console.error('GET /api/rest-schedule error:', e);
     res.status(500).json({ error: e.message });
