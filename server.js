@@ -553,7 +553,7 @@ app.get('/api/rest-schedule', async (req, res) => {
           }
         }
       }
-      otQueue.sort((a, b) => b.overtime - a.overtime);
+      // Don't sort by overtime - match frontend order (employee list order)
 
       // Distribute OT rest (separate from week rest)
       const otDayRest = {}; // section -> day -> count
