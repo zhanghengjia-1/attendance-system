@@ -82,7 +82,24 @@ app.get('/api/daily-summary', async (req, res) => {
       db.getEditedData(), db.getDailyEdits(), db.getSectionAssignments()
     ]);
 
-    const monthRecords = (base.attendance || {})[monthStr] || [];
+    // Auto-create month if missing (matches frontend getMonthData behavior)
+    if (!base.attendance[monthStr]) {
+      const mNum = parseInt(monthStr.replace('2026年','').replace('月',''));
+      const numDays = new Date(2026, mNum, 0).getDate();
+      const refMonth = Object.keys(base.attendance)[0];
+      const refData = refMonth ? (base.attendance[refMonth] || []) : [];
+      const orderedEmpIds = refData.map(r => r.emp_id);
+      const allEmpIds = Object.keys(base.employees);
+      for (const eid of allEmpIds) if (orderedEmpIds.indexOf(eid) === -1) orderedEmpIds.push(eid);
+      base.attendance[monthStr] = orderedEmpIds.map(eid => {
+        const emp = base.employees[eid] || { name: eid, position: '' };
+        const emptyDaily = [];
+        for (let d = 1; d <= numDays; d++) emptyDaily.push({ day: d, type: '/', type2: '/', hours: '/' });
+        return { emp_id: eid, name: emp.name, position: emp.position, daily: emptyDaily, regular_hours: 0, weekday_ot: 0, weekend_ot: 0, holiday_ot: 0, total_hours: 0 };
+      });
+    }
+
+    const monthRecords = base.attendance[monthStr] || [];
     const monthEdits = (dailyEdits || {})[monthStr] || {};
     const editOverrides = (editedData || {})[monthStr] || {};
 
@@ -401,7 +418,24 @@ app.get('/api/rest-schedule', async (req, res) => {
     const base = loadBaseData();
     const [dailyEdits, sections] = await Promise.all([db.getDailyEdits(), db.getSectionAssignments()]);
     const monthEdits = (dailyEdits || {})[mStr] || {};
-    const monthRecords = (base.attendance || {})[mStr] || [];
+
+    // Auto-create month if missing
+    if (!base.attendance[mStr]) {
+      const numDays = new Date(now.getFullYear(), monthKey, 0).getDate();
+      const refMonth = Object.keys(base.attendance)[0];
+      const refData = refMonth ? (base.attendance[refMonth] || []) : [];
+      const orderedEmpIds = refData.map(r => r.emp_id);
+      const allEmpIds = Object.keys(base.employees);
+      for (const eid of allEmpIds) if (orderedEmpIds.indexOf(eid) === -1) orderedEmpIds.push(eid);
+      base.attendance[mStr] = orderedEmpIds.map(eid => {
+        const emp = base.employees[eid] || { name: eid, position: '' };
+        const emptyDaily = [];
+        for (let d = 1; d <= numDays; d++) emptyDaily.push({ day: d, type: '/', type2: '/', hours: '/' });
+        return { emp_id: eid, name: emp.name, position: emp.position, daily: emptyDaily, regular_hours: 0, weekday_ot: 0, weekend_ot: 0, holiday_ot: 0, total_hours: 0 };
+      });
+    }
+
+    const monthRecords = base.attendance[mStr] || [];
 
     const WEEKLY_LIMIT = 61, MAX_PER_SECTION_PER_DAY = 2;
     const settings = await db.getSettings();
