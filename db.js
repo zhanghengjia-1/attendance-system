@@ -53,6 +53,9 @@ async function initDB() {
           CREATE TABLE IF NOT EXISTS custom_employees (
             emp_id TEXT PRIMARY KEY, name TEXT NOT NULL, position TEXT DEFAULT '设备技术员'
           );
+          CREATE TABLE IF NOT EXISTS hidden_employees (
+            emp_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW()
+          );
         `);
         await client.query("INSERT INTO settings (key, value) VALUES ('otLimit','36') ON CONFLICT DO NOTHING");
         await client.query("INSERT INTO settings (key, value) VALUES ('otWarn','30') ON CONFLICT DO NOTHING");
@@ -172,6 +175,20 @@ async function getCustomEmployees() {
   if (useDB) { const { rows } = await pool.query('SELECT emp_id, name, position FROM custom_employees'); const r = {}; for (const row of rows) r[row.emp_id] = { name: row.name, position: row.position }; return r; }
   return fileState.customEmployees || {};
 }
+
+// ===================== Hidden Employees (deleted from base) =====================
+async function getHiddenEmployees() {
+  if (useDB) { const { rows } = await pool.query('SELECT emp_id FROM hidden_employees'); const r = {}; for (const row of rows) r[row.emp_id] = true; return r; }
+  return fileState.hiddenEmployees || {};
+}
+async function hideEmployee(empId) {
+  if (useDB) { await pool.query('INSERT INTO hidden_employees (emp_id) VALUES ($1) ON CONFLICT DO NOTHING', [empId]); }
+  else { if (!fileState.hiddenEmployees) fileState.hiddenEmployees = {}; fileState.hiddenEmployees[empId] = true; saveFileState(); }
+}
+async function showEmployee(empId) {
+  if (useDB) { await pool.query('DELETE FROM hidden_employees WHERE emp_id=$1', [empId]); }
+  else { if (fileState.hiddenEmployees) { delete fileState.hiddenEmployees[empId]; saveFileState(); } }
+}
 async function saveCustomEmployee(empId, name, position) {
   if (useDB) { await pool.query('INSERT INTO custom_employees (emp_id,name,position) VALUES ($1,$2,$3) ON CONFLICT (emp_id) DO UPDATE SET name=$2,position=$3', [empId, name, position || '设备技术员']); }
   else { fileState.customEmployees[empId] = { name, position: position || '设备技术员' }; saveFileState(); }
@@ -223,4 +240,5 @@ module.exports = {
   getOTApplications, addOTApplication, updateOTStatus, deleteOTApplication,
   getSettings, saveSettings, getCustomEmployees, saveCustomEmployee,
   getSectionAssignments, saveSectionAssignment, deleteEmployee,
+  getHiddenEmployees, hideEmployee, showEmployee,
 };

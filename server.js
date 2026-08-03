@@ -25,19 +25,24 @@ function loadBaseData() {
 app.get('/api/data', async (req, res) => {
   try {
     const base = loadBaseData();
-    const [editedData, dailyEdits, otApps, settings, customEmps, sections] = await Promise.all([
+    const [editedData, dailyEdits, otApps, settings, customEmps, sections, hiddenEmps] = await Promise.all([
       db.getEditedData(), db.getDailyEdits(), db.getOTApplications(),
-      db.getSettings(), db.getCustomEmployees(), db.getSectionAssignments()
+      db.getSettings(), db.getCustomEmployees(), db.getSectionAssignments(), db.getHiddenEmployees()
     ]);
+    // Filter out hidden employees from base
+    const filteredEmployees = {};
+    for (const [eid, info] of Object.entries(base.employees || {})) {
+      if (!hiddenEmps[eid]) filteredEmployees[eid] = info;
+    }
     res.json({
-      employees: { ...base.employees, ...customEmps },
+      employees: { ...filteredEmployees, ...customEmps },
       attendance: base.attendance,
       editedData, dailyEdits,
       otApplications: otApps,
       settings,
       customEmployees: customEmps,
       sectionAssignments: sections,
-      customEmployees: customEmps
+      hiddenEmployees: hiddenEmps
     });
   } catch(e) {
     console.error('GET /api/data error:', e);
@@ -78,9 +83,13 @@ app.get('/api/daily-summary', async (req, res) => {
     const day = d.getDate();
 
     const base = loadBaseData();
-    const [editedData, dailyEdits, sections] = await Promise.all([
-      db.getEditedData(), db.getDailyEdits(), db.getSectionAssignments()
+    const [editedData, dailyEdits, sections, hiddenEmps] = await Promise.all([
+      db.getEditedData(), db.getDailyEdits(), db.getSectionAssignments(), db.getHiddenEmployees()
     ]);
+    // Filter out hidden employees from base
+    for (const hid of Object.keys(hiddenEmps)) {
+      if (base.employees[hid]) delete base.employees[hid];
+    }
 
     // Auto-create month if missing (matches frontend getMonthData behavior)
     if (!base.attendance[monthStr]) {
@@ -296,6 +305,17 @@ app.put('/api/employees/:empId', async (req, res) => {
 app.delete('/api/employees/:empId', async (req, res) => {
   try {
     await db.deleteEmployee(req.params.empId);
+    await db.hideEmployee(req.params.empId);
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Restore hidden employee
+app.post('/api/employees/:empId/restore', async (req, res) => {
+  try {
+    await db.showEmployee(req.params.empId);
     res.json({ success: true });
   } catch(e) {
     res.status(500).json({ error: e.message });
@@ -416,7 +436,10 @@ app.get('/api/rest-schedule', async (req, res) => {
     const lastDay = new Date(now.getFullYear(), monthKey, 0).getDate();
 
     const base = loadBaseData();
-    const [dailyEdits, sections] = await Promise.all([db.getDailyEdits(), db.getSectionAssignments()]);
+    const [dailyEdits, sections, hiddenEmps] = await Promise.all([db.getDailyEdits(), db.getSectionAssignments(), db.getHiddenEmployees()]);
+    for (const hid of Object.keys(hiddenEmps || {})) {
+      if (base.employees[hid]) delete base.employees[hid];
+    }
     const monthEdits = (dailyEdits || {})[mStr] || {};
 
     // Auto-create month if missing
