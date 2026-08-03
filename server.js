@@ -565,14 +565,28 @@ app.get('/api/rest-schedule', async (req, res) => {
         const alreadyHasRest = result.some(r => r.empId === item.empId && r.restDay === item.restOn);
         if (alreadyHasRest) continue;
 
-        // Check section day limit (combine with week-based)
-        const existingCount = (dayRest[sec] && dayRest[sec][item.restOn]) || 0;
-        const otCount = (otDayRest[sec][item.restOn] || 0);
-        if (existingCount + otCount < MAX_PER_SECTION_PER_DAY) {
-          otDayRest[sec][item.restOn] = otCount + 1;
-          const name = (base.employees || {})[item.empId] ? base.employees[item.empId].name : item.empId;
-          result.push({ empId: item.empId, name, section: sec, restDay: item.restOn, restType: 'ot', overtime: item.overtime });
+        // Find next available day (Mon-Sat, exclude Sunday)
+        let chosenDay = item.restOn;
+        const existingCount0 = (dayRest[sec] && dayRest[sec][chosenDay]) || 0;
+        const otCount0 = (otDayRest[sec][chosenDay] || 0);
+        if (existingCount0 + otCount0 >= MAX_PER_SECTION_PER_DAY) {
+          let foundDay = null;
+          for (let tryDay = today; tryDay <= today + 6; tryDay++) {
+            if (tryDay > lastDay) break;
+            const tryDOW = new Date(now.getFullYear(), monthKey-1, tryDay).getDay();
+            if (tryDOW === 0) continue;
+            const ec = (dayRest[sec] && dayRest[sec][tryDay]) || 0;
+            const oc = otDayRest[sec][tryDay] || 0;
+            if (ec + oc < MAX_PER_SECTION_PER_DAY) { foundDay = tryDay; break; }
+          }
+          if (foundDay === null) continue;
+          chosenDay = foundDay;
         }
+
+        const ec2 = (dayRest[sec] && dayRest[sec][chosenDay]) || 0;
+        otDayRest[sec][chosenDay] = (otDayRest[sec][chosenDay] || 0) + 1;
+        const name = (base.employees || {})[item.empId] ? base.employees[item.empId].name : item.empId;
+        result.push({ empId: item.empId, name, section: sec, restDay: chosenDay, restType: 'ot', overtime: item.overtime });
       }
     }
 

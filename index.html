@@ -1828,7 +1828,18 @@ function renderSchedule() {
 
       var sec = getSection(empId);
       if (!dayRestCount[sec]) dayRestCount[sec] = {};
-      if ((dayRestCount[sec][restDay] || 0) >= 2) continue;
+      // Find next available day in current week (Mon-Sat, exclude Sunday)
+      if ((dayRestCount[sec][restDay] || 0) >= 2) {
+        var foundDay = null;
+        for (var tryDay = today; tryDay <= today + 6; tryDay++) {
+          if (tryDay > lastDay) break;
+          var tryDOW = new Date(2026, m-1, tryDay).getDay();
+          if (tryDOW === 0) continue; // skip Sunday
+          if ((dayRestCount[sec][tryDay] || 0) < 2) { foundDay = tryDay; break; }
+        }
+        if (foundDay === null) continue;
+        restDay = foundDay;
+      }
 
       dayRestCount[sec][restDay] = (dayRestCount[sec][restDay] || 0) + 1;
       if (!forcedRest[empId]) forcedRest[empId] = [];
