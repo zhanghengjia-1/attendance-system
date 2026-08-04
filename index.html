@@ -315,7 +315,7 @@ tr:hover { background: #f8f9fb; }
         <span style="font-size:12px;">h/月</span>
         <span style="margin-left:16px;font-size:12px;">周工时上限</span><input type="number" id="wlWeeklyInput" value="61" min="1" max="168" step="1" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
         <span style="font-size:12px;">h/周（超限标记调休）</span>
-        <span style="margin-left:16px;font-size:12px;">日加班超</span><input type="number" id="wlOtRestInput" value="4" min="1" max="24" step="0.5" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
+        <span style="margin-left:16px;font-size:12px;">日加班超</span><input type="number" id="wlOtRestInput" value="3.9" min="1" max="24" step="0.5" style="width:60px;padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:13px;" onchange="updateWaterlineSettings()">
         <span style="font-size:12px;">h需下早班</span>
         <span style="font-size:12px;color:var(--text-secondary);" id="wlSettingsStatus"></span>
       </div>
@@ -681,6 +681,8 @@ async function loadData() {
     OT_LIMIT = parseFloat(serverData.settings.otLimit) || 36;
     OT_WARN = parseFloat(serverData.settings.otWarn) || 30;
     OT_REST_THRESHOLD = parseFloat(serverData.settings.otRestThreshold) || 4;
+    var otRestEl = document.getElementById('wlOtRestInput');
+    if (otRestEl) otRestEl.value = OT_REST_THRESHOLD;
   }
   WEEKLY_LIMIT = parseFloat(serverData.settings.weeklyLimit) || 61;
   sectionAssignments = serverData.sectionAssignments || {};
