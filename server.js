@@ -460,7 +460,7 @@ app.get('/api/rest-schedule', async (req, res) => {
 
     const monthRecords = base.attendance[mStr] || [];
 
-    const WEEKLY_LIMIT = 61, MAX_PER_SECTION_PER_DAY = 2;
+    const WEEKLY_LIMIT = 61, MAX_PER_SECTION_PER_DAY = 1;
     const settings = await db.getSettings();
     const OT_REST_THRESHOLD = parseFloat(settings.otRestThreshold) || 4;
     const data = [];

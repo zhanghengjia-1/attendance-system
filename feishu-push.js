@@ -51,7 +51,7 @@ async function main() {
     }
   } catch(e) { console.warn('获取调休数据失败:', e.message); }
 
-  const sectionOrder = ['模组','整机','2.5前加工','库房','测包','立库'];
+  const sectionOrder = ['模组主线','模组副线','整机','2.5前加工','库房','测包','立库'];
   rows.sort((a, b) => {
     const ia = sectionOrder.indexOf(a.section), ib = sectionOrder.indexOf(b.section);
     if (ia !== ib) return (ia === -1 ? 999 : ia) - (ib === -1 ? 999 : ib);
