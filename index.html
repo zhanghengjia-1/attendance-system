@@ -376,7 +376,7 @@ tr:hover { background: #f8f9fb; }
         <span style="font-weight:500;font-size:13px;">🔧 工段管理：</span>
         <select id="sectionEmpSelect" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;min-width:120px;"></select>
         <select id="sectionSelect" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
-          <option value="模组主线">模组主线</option><option value="模组副线">模组副线</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option><option value="立库">立库</option>
+          <option value="模组主线">模组主线</option><option value="模组副线">模组副线</option><option value="模组投背板">模组投背板</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option><option value="立库">立库</option>
         </select>
         <button class="btn btn-primary btn-sm" onclick="setSection()">设置工段</button>
         <span style="font-size:11px;color:var(--text-secondary);" id="sectionStatus"></span>
@@ -389,7 +389,7 @@ tr:hover { background: #f8f9fb; }
           <option value="设备技术员">设备技术员</option><option value="设备主管">设备主管</option><option value="实习生">实习生</option>
         </select>
         <select id="newEmpSection" style="padding:4px 8px;border:1px solid var(--border);border-radius:4px;font-size:12px;">
-          <option value="">选择工段</option><option value="模组主线">模组主线</option><option value="模组副线">模组副线</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option><option value="立库">立库</option>
+          <option value="">选择工段</option><option value="模组主线">模组主线</option><option value="模组副线">模组副线</option><option value="模组投背板">模组投背板</option><option value="整机">整机</option><option value="2.5前加工">2.5前加工</option><option value="库房">库房</option><option value="测包">测包</option><option value="立库">立库</option>
         </select>
         <button class="btn btn-primary btn-sm" onclick="addEmployee()">添加</button>
         <span style="font-size:11px;color:var(--text-secondary);" id="addEmpStatus"></span>
@@ -1371,7 +1371,7 @@ function renderEditableTable() {
   const today = getTodayInMonth(month);
   if (today) document.getElementById('todayLabel').textContent = `${month.replace('2026年','')}${today}日 (${WEEKDAY_NAMES[getDayOfWeek(month, today)]})`;
   else document.getElementById('todayLabel').textContent = '非当月';
-  var sectionOrder = ['模组主线','模组副线','整机','2.5前加工','库房','测包','立库'];
+  var sectionOrder = ['模组主线','模组副线','模组投背板','整机','2.5前加工','库房','测包','立库'];
   data.sort(function(a, b) {
     var sa = getSection(a.emp_id) || '', sb = getSection(b.emp_id) || '';
     var ia = sectionOrder.indexOf(sa), ib = sectionOrder.indexOf(sb);
