@@ -116,6 +116,8 @@ app.get('/api/daily-summary', async (req, res) => {
 
     for (const rec of monthRecords) {
       const empId = rec.emp_id;
+      // Skip hidden/deleted employees
+      if (!base.employees[empId]) continue;
       const empName = (base.employees || {})[empId] ? base.employees[empId].name : rec.name;
       const daily = rec.daily || [];
       const empEdits = monthEdits[empId] || {};
@@ -464,8 +466,9 @@ app.get('/api/rest-schedule', async (req, res) => {
     const settings = await db.getSettings();
     const OT_REST_THRESHOLD = parseFloat(settings.otRestThreshold) || 4;
     const data = [];
-    // Build merged data like frontend
+    // Build merged data like frontend (skip hidden employees)
     for (const rec of monthRecords) {
+      if (!base.employees[rec.emp_id]) continue;
       const empEdits = monthEdits[rec.emp_id] || {};
       const daily = (rec.daily || []).map(dd => {
         const dk = String(dd.day);
