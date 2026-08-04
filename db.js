@@ -153,19 +153,21 @@ async function getSettings() {
   if (useDB) {
     const { rows } = await pool.query('SELECT key, value FROM settings');
     const r = {}; for (const row of rows) r[row.key] = row.value;
-    return { otLimit: parseFloat(r.otLimit) || 36, otWarn: parseFloat(r.otWarn) || 30, weeklyLimit: parseFloat(r.weeklyLimit) || 61 };
+    return { otLimit: parseFloat(r.otLimit) || 36, otWarn: parseFloat(r.otWarn) || 30, weeklyLimit: parseFloat(r.weeklyLimit) || 61, otRestThreshold: parseFloat(r.otRestThreshold) || 4 };
   }
-  return fileState.settings || { otLimit: 36, otWarn: 30, weeklyLimit: 61 };
+  return fileState.settings || { otLimit: 36, otWarn: 30, weeklyLimit: 61, otRestThreshold: 4 };
 }
-async function saveSettings(otLimit, otWarn, weeklyLimit) {
+async function saveSettings(otLimit, otWarn, weeklyLimit, otRestThreshold) {
   if (useDB) {
     if (otLimit !== undefined) await pool.query("INSERT INTO settings (key,value) VALUES ('otLimit',$1) ON CONFLICT (key) DO UPDATE SET value=$1", [String(otLimit)]);
     if (otWarn !== undefined) await pool.query("INSERT INTO settings (key,value) VALUES ('otWarn',$1) ON CONFLICT (key) DO UPDATE SET value=$1", [String(otWarn)]);
     if (weeklyLimit !== undefined) await pool.query("INSERT INTO settings (key,value) VALUES ('weeklyLimit',$1) ON CONFLICT (key) DO UPDATE SET value=$1", [String(weeklyLimit)]);
+    if (otRestThreshold !== undefined) await pool.query("INSERT INTO settings (key,value) VALUES ('otRestThreshold',$1) ON CONFLICT (key) DO UPDATE SET value=$1", [String(otRestThreshold)]);
   } else {
     if (otLimit !== undefined) fileState.settings.otLimit = parseFloat(otLimit);
     if (otWarn !== undefined) fileState.settings.otWarn = parseFloat(otWarn);
     if (weeklyLimit !== undefined) fileState.settings.weeklyLimit = parseFloat(weeklyLimit);
+    if (otRestThreshold !== undefined) fileState.settings.otRestThreshold = parseFloat(otRestThreshold);
     saveFileState();
   }
 }
