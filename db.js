@@ -56,6 +56,12 @@ async function initDB() {
           CREATE TABLE IF NOT EXISTS hidden_employees (
             emp_id TEXT PRIMARY KEY, hidden_at TIMESTAMPTZ DEFAULT NOW()
           );
+          CREATE TABLE IF NOT EXISTS rest_schedule (
+            month TEXT NOT NULL, emp_id TEXT NOT NULL,
+            rest_day INTEGER NOT NULL, rest_type TEXT DEFAULT 'week',
+            week_num INTEGER, locked BOOLEAN DEFAULT true,
+            PRIMARY KEY (month, emp_id)
+          );
         `);
         await client.query("INSERT INTO settings (key, value) VALUES ('otLimit','36') ON CONFLICT DO NOTHING");
         await client.query("INSERT INTO settings (key, value) VALUES ('otWarn','30') ON CONFLICT DO NOTHING");
@@ -237,10 +243,41 @@ async function deleteEmployee(empId) {
   }
 }
 
+// ===================== Rest Schedule =====================
+async function getRestSchedule(month) {
+  if (useDB) {
+    const { rows } = await pool.query('SELECT emp_id, rest_day, rest_type, week_num FROM rest_schedule WHERE month=$1', [month]);
+    const r = {};
+    for (const row of rows) r[row.emp_id] = { restDay: row.rest_day, restType: row.rest_type, week: row.week_num };
+    return r;
+  }
+  if (!fileState.restSchedule) fileState.restSchedule = {};
+  return fileState.restSchedule[month] || {};
+}
+async function saveRestSchedule(month, assignments) {
+  if (useDB) {
+    for (const [empId, info] of Object.entries(assignments)) {
+      await pool.query(
+        'INSERT INTO rest_schedule (month,emp_id,rest_day,rest_type,week_num) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (month,emp_id) DO UPDATE SET rest_day=$3,rest_type=$4,week_num=$5',
+        [month, empId, info.restDay, info.restType, info.week]
+      );
+    }
+  } else {
+    if (!fileState.restSchedule) fileState.restSchedule = {};
+    fileState.restSchedule[month] = assignments;
+    saveFileState();
+  }
+}
+async function clearRestSchedule(month) {
+  if (useDB) { await pool.query('DELETE FROM rest_schedule WHERE month=$1', [month]); }
+  else { if (fileState.restSchedule) { delete fileState.restSchedule[month]; saveFileState(); } }
+}
+
 module.exports = {
   initDB, getEditedData, saveAttendanceEdit, getDailyEdits, saveDailyEdit,
   getOTApplications, addOTApplication, updateOTStatus, deleteOTApplication,
   getSettings, saveSettings, getCustomEmployees, saveCustomEmployee,
   getSectionAssignments, saveSectionAssignment, deleteEmployee,
   getHiddenEmployees, hideEmployee, showEmployee,
+  getRestSchedule, saveRestSchedule, clearRestSchedule,
 };

@@ -1723,6 +1723,9 @@ function getWeekRange(weekNum, month) {
 }
 
 function renderSchedule() {
+  renderScheduleAsync().catch(console.error);
+}
+async function renderScheduleAsync() {
   var month = document.getElementById('scheduleMonth').value;
   if (!month) return;
   var data = getMonthData(month);
@@ -1732,13 +1735,36 @@ function renderSchedule() {
   var today = new Date();
   var todayStr = today.getFullYear()+'-'+(today.getMonth()+1)+'-'+today.getDate();
 
-  // Calculate forced rest: if week > 61h, distribute rest across next week Mon-Sat, max 2/工段/天
+  // Load saved rest schedule
+  var savedRest = {};
+  try {
+    var savedRes = await fetch('/api/rest-schedule/saved?month='+encodeURIComponent(month));
+    if (savedRes.ok) savedRest = await savedRes.json();
+  } catch(e) {}
+
+  // Calculate forced rest
   var forcedRest = {};
   var dayRestCount = {}; // section -> day -> count
-  // First pass: collect all employees that need rest, sorted by exceeded amount (most first)
+  var savedAssignments = {};
+  var assignedEmpIds = {};
+
+  // Lock saved rest days (use saved as ground truth)
+  for (var savedEid in savedRest) {
+    var sr = savedRest[savedEid];
+    var sec = getSection(savedEid) || '未分组';
+    if (!forcedRest[savedEid]) forcedRest[savedEid] = [];
+    forcedRest[savedEid].push({ week: sr.week || 0, restDay: sr.restDay, restType: sr.restType || 'week' });
+    if (!dayRestCount[sec]) dayRestCount[sec] = {};
+    dayRestCount[sec][sr.restDay] = (dayRestCount[sec][sr.restDay] || 0) + 1;
+    assignedEmpIds[savedEid] = true;
+    savedAssignments[savedEid] = { restDay: sr.restDay, restType: sr.restType || 'week', week: sr.week || 0 };
+  }
+
+  // First pass: collect employees that need week-based rest (skip already saved)
   var restQueue = [];
   for (var ri = 0; ri < data.length; ri++) {
     var rec = data[ri];
+    if (assignedEmpIds[rec.emp_id]) continue; // already has saved rest
     var weekHours = {};
     var daily = rec.daily || [];
     for (var di = 0; di < daily.length; di++) {
@@ -1815,6 +1841,7 @@ function renderSchedule() {
     if (yesterdayDay >= 1) {
     for (var ei = 0; ei < data.length; ei++) {
       var empId = data[ei].emp_id;
+      if (assignedEmpIds[empId]) continue; // already has saved rest
       var ddaily = data[ei].daily || [];
       var yesterdayRec = ddaily.find(function(d){ return d.day === yesterdayDay; });
       if (!yesterdayRec) continue;
@@ -1909,6 +1936,31 @@ function renderSchedule() {
   }
 
   document.getElementById('scheduleContent').innerHTML = html;
+
+  // Save new assignments (only if there are new ones not already saved)
+  var newAssignments = {};
+  var hasSame = true;
+  for (var eid in forcedRest) {
+    var frs = forcedRest[eid];
+    if (frs.length > 0) {
+      var fr = frs[0]; // take first rest assignment
+      var key = eid+':'+fr.restDay;
+      if (!savedAssignments[eid] || savedAssignments[eid].restDay !== fr.restDay || savedAssignments[eid].restType !== (fr.restType||'week')) {
+        hasSame = false;
+        newAssignments[eid] = { restDay: fr.restDay, restType: fr.restType || 'week', week: fr.week || 0 };
+      }
+    }
+  }
+  // Also mark removed (employee no longer in forcedRest but was in savedRest)
+  for (var oldEid in savedAssignments) {
+    if (!forcedRest[oldEid] || forcedRest[oldEid].length === 0) {
+      hasSame = false;
+      newAssignments[oldEid] = null; // will be removed
+    }
+  }
+  if (!hasSame) {
+    API.post('/api/rest-schedule', { month: month, assignments: newAssignments }).catch(function(){});
+  }
 }
 
 </script>

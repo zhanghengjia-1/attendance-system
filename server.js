@@ -625,6 +625,30 @@ app.get('/api/rest-schedule', async (req, res) => {
   }
 });
 
+// Save rest schedule assignments (from frontend)
+app.post('/api/rest-schedule', async (req, res) => {
+  try {
+    const { month, assignments } = req.body;
+    if (!month || !assignments) return res.status(400).json({ error: 'Missing month or assignments' });
+    await db.saveRestSchedule(month, assignments);
+    res.json({ success: true });
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
+// Get saved rest schedule
+app.get('/api/rest-schedule/saved', async (req, res) => {
+  try {
+    const { month } = req.query;
+    if (!month) return res.status(400).json({ error: 'Missing month param' });
+    const schedule = await db.getRestSchedule(month);
+    res.json(schedule);
+  } catch(e) {
+    res.status(500).json({ error: e.message });
+  }
+});
+
 // Health check
 app.get('/health', (req, res) => res.json({ status: 'ok' }));
 
