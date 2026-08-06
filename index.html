@@ -1769,21 +1769,9 @@ async function renderScheduleAsync() {
       var stillValid = false;
 
       if (sr.restType === 'ot') {
-        // OT rest: check if yesterday OT still > threshold
-        var todayDt = getTodayInMonth(month);
-        if (todayDt && todayDt >= 2) {
-          var yd = (new Date(2026, m-1, todayDt).getDay() === 1) ? todayDt - 2 : todayDt - 1;
-          if (yd >= 1) {
-            var recOT = data.find(function(r){ return r.emp_id === savedEid; });
-            if (recOT) {
-              var ydRec = (recOT.daily||[]).find(function(d){ return d.day === yd; });
-              if (ydRec) {
-                var ydOT = (ydRec._lianban || 0) + (ydRec._ot || 0);
-                if (ydOT > OT_REST_THRESHOLD) stillValid = true;
-              }
-            }
-          }
-        }
+        // OT rest: always keep — triggered by a specific day's overtime,
+        // cannot reliably re-verify days later when "yesterday" has shifted
+        stillValid = true;
       } else {
         // Week rest: check if that week still exceeds WEEKLY_LIMIT
         var wh = empWeekHours[savedEid];
