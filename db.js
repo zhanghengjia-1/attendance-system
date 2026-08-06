@@ -256,9 +256,10 @@ async function getRestSchedule(month) {
 }
 async function saveRestSchedule(month, assignments) {
   if (useDB) {
+    await pool.query('DELETE FROM rest_schedule WHERE month=$1', [month]);
     for (const [empId, info] of Object.entries(assignments)) {
       await pool.query(
-        'INSERT INTO rest_schedule (month,emp_id,rest_day,rest_type,week_num) VALUES ($1,$2,$3,$4,$5) ON CONFLICT (month,emp_id) DO UPDATE SET rest_day=$3,rest_type=$4,week_num=$5',
+        'INSERT INTO rest_schedule (month,emp_id,rest_day,rest_type,week_num) VALUES ($1,$2,$3,$4,$5)',
         [month, empId, info.restDay, info.restType, info.week]
       );
     }

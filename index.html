@@ -1937,30 +1937,16 @@ async function renderScheduleAsync() {
 
   document.getElementById('scheduleContent').innerHTML = html;
 
-  // Save new assignments (only if there are new ones not already saved)
-  var newAssignments = {};
-  var hasSame = true;
+  // Save all current rest assignments (full replace)
+  var toSave = {};
   for (var eid in forcedRest) {
     var frs = forcedRest[eid];
     if (frs.length > 0) {
-      var fr = frs[0]; // take first rest assignment
-      var key = eid+':'+fr.restDay;
-      if (!savedAssignments[eid] || savedAssignments[eid].restDay !== fr.restDay || savedAssignments[eid].restType !== (fr.restType||'week')) {
-        hasSame = false;
-        newAssignments[eid] = { restDay: fr.restDay, restType: fr.restType || 'week', week: fr.week || 0 };
-      }
+      var fr = frs[0];
+      toSave[eid] = { restDay: fr.restDay, restType: fr.restType || 'week', week: fr.week || 0 };
     }
   }
-  // Also mark removed (employee no longer in forcedRest but was in savedRest)
-  for (var oldEid in savedAssignments) {
-    if (!forcedRest[oldEid] || forcedRest[oldEid].length === 0) {
-      hasSame = false;
-      newAssignments[oldEid] = null; // will be removed
-    }
-  }
-  if (!hasSame) {
-    API.post('/api/rest-schedule', { month: month, assignments: newAssignments }).catch(function(){});
-  }
+  API.post('/api/rest-schedule', { month: month, assignments: toSave }).catch(function(){});
 }
 
 </script>
