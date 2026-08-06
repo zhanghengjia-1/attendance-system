@@ -1745,33 +1745,74 @@ async function renderScheduleAsync() {
   var forcedRest = {};
   var dayRestCount = {};
   var hasSaved = Object.keys(savedRest).length > 0;
+  var assignedEmpIds = {}; // employees who already have a valid rest day locked
+
+  // Build week hour lookup for all employees
+  var empWeekHours = {};
+  for (var ri = 0; ri < data.length; ri++) {
+    var rec = data[ri];
+    var weekHours = {};
+    var daily = rec.daily || [];
+    for (var di = 0; di < daily.length; di++) {
+      var d = daily[di];
+      var w = getISOWeek(2026, m, d.day);
+      if (!weekHours[w]) weekHours[w] = 0;
+      weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._lianban !== undefined ? d._lianban : 0) + (d._ot !== undefined ? d._ot : 0);
+    }
+    empWeekHours[rec.emp_id] = weekHours;
+  }
 
   if (hasSaved) {
-    // === Locked mode: use saved data, no recalculation ===
+    // === Verify saved rest: keep if condition still met, remove otherwise ===
     for (var savedEid in savedRest) {
       var sr = savedRest[savedEid];
-      var sec = getSection(savedEid) || '未分组';
-      if (!forcedRest[savedEid]) forcedRest[savedEid] = [];
-      forcedRest[savedEid].push({ week: sr.week || 0, restDay: sr.restDay, restType: sr.restType || 'week' });
-      if (!dayRestCount[sec]) dayRestCount[sec] = {};
-      dayRestCount[sec][sr.restDay] = (dayRestCount[sec][sr.restDay] || 0) + 1;
-    }
-  } else {
-    // === Fresh computation: calculate from scratch ===
-    // Week-based rest
-    var restQueue = [];
-    for (var ri = 0; ri < data.length; ri++) {
-      var rec = data[ri];
-      var weekHours = {};
-      var daily = rec.daily || [];
-      for (var di = 0; di < daily.length; di++) {
-        var d = daily[di];
-        var w = getISOWeek(2026, m, d.day);
-        if (!weekHours[w]) weekHours[w] = 0;
-        weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._lianban !== undefined ? d._lianban : 0) + (d._ot !== undefined ? d._ot : 0);
+      var stillValid = false;
+
+      if (sr.restType === 'ot') {
+        // OT rest: check if yesterday OT still > threshold
+        var todayDt = getTodayInMonth(month);
+        if (todayDt && todayDt >= 2) {
+          var yd = (new Date(2026, m-1, todayDt).getDay() === 1) ? todayDt - 2 : todayDt - 1;
+          if (yd >= 1) {
+            var recOT = data.find(function(r){ return r.emp_id === savedEid; });
+            if (recOT) {
+              var ydRec = (recOT.daily||[]).find(function(d){ return d.day === yd; });
+              if (ydRec) {
+                var ydOT = (ydRec._lianban || 0) + (ydRec._ot || 0);
+                if (ydOT > OT_REST_THRESHOLD) stillValid = true;
+              }
+            }
+          }
+        }
+      } else {
+        // Week rest: check if that week still exceeds WEEKLY_LIMIT
+        var wh = empWeekHours[savedEid];
+        if (wh && sr.week > 0) {
+          var wkTotal = wh[sr.week] || 0;
+          var firstWeek = getISOWeek(2026, m, 1);
+          if (sr.week !== firstWeek && wkTotal > WEEKLY_LIMIT) stillValid = true;
+        }
       }
-      var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
-      for (var wi = 0; wi < weekKeys.length; wi++) {
+
+      if (stillValid) {
+        // Keep it locked
+        var sec = getSection(savedEid) || '未分组';
+        if (!forcedRest[savedEid]) forcedRest[savedEid] = [];
+        forcedRest[savedEid].push({ week: sr.week || 0, restDay: sr.restDay, restType: sr.restType || 'week' });
+        if (!dayRestCount[sec]) dayRestCount[sec] = {};
+        dayRestCount[sec][sr.restDay] = (dayRestCount[sec][sr.restDay] || 0) + 1;
+        assignedEmpIds[savedEid] = true;
+      }
+    }
+  }
+
+  // === Compute new rest for employees exceeding threshold but not assigned yet ===
+  // Week-based rest
+  var restQueue = [];
+  for (var ri = 0; ri < data.length; ri++) {
+    var rec = data[ri];
+    if (assignedEmpIds[rec.emp_id]) continue;
+    var weekHours = empWeekHours[rec.emp_id];
         var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
         var firstWeekOfMonth = getISOWeek(2026, m, 1);
         if (wkNum === firstWeekOfMonth) continue;
@@ -1852,7 +1893,7 @@ async function renderScheduleAsync() {
       }
     }
 
-    // Save immediately to lock it
+    // Save to lock it
     var toSave = {};
     for (var eid in forcedRest) {
       var frs = forcedRest[eid];
@@ -1862,7 +1903,6 @@ async function renderScheduleAsync() {
       }
     }
     API.post('/api/rest-schedule', { month: month, assignments: toSave }).catch(function(){});
-  }
 
   // ===== Group rest summary by REST week + 工段 =====
   var html = '';
