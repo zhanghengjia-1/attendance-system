@@ -1742,139 +1742,126 @@ async function renderScheduleAsync() {
     if (savedRes.ok) savedRest = await savedRes.json();
   } catch(e) {}
 
-  // Calculate forced rest
   var forcedRest = {};
-  var dayRestCount = {}; // section -> day -> count
-  var savedAssignments = {};
-  var assignedEmpIds = {};
+  var dayRestCount = {};
+  var hasSaved = Object.keys(savedRest).length > 0;
 
-  // Lock saved rest days (use saved as ground truth)
-  for (var savedEid in savedRest) {
-    var sr = savedRest[savedEid];
-    var sec = getSection(savedEid) || '未分组';
-    if (!forcedRest[savedEid]) forcedRest[savedEid] = [];
-    forcedRest[savedEid].push({ week: sr.week || 0, restDay: sr.restDay, restType: sr.restType || 'week' });
-    if (!dayRestCount[sec]) dayRestCount[sec] = {};
-    dayRestCount[sec][sr.restDay] = (dayRestCount[sec][sr.restDay] || 0) + 1;
-    assignedEmpIds[savedEid] = true;
-    savedAssignments[savedEid] = { restDay: sr.restDay, restType: sr.restType || 'week', week: sr.week || 0 };
-  }
-
-  // First pass: collect employees that need week-based rest (skip already saved)
-  var restQueue = [];
-  for (var ri = 0; ri < data.length; ri++) {
-    var rec = data[ri];
-    if (assignedEmpIds[rec.emp_id]) continue; // already has saved rest
-    var weekHours = {};
-    var daily = rec.daily || [];
-    for (var di = 0; di < daily.length; di++) {
-      var d = daily[di];
-      var w = getISOWeek(2026, m, d.day);
-      if (!weekHours[w]) weekHours[w] = 0;
-      weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._lianban !== undefined ? d._lianban : 0) + (d._ot !== undefined ? d._ot : 0);
-    }
-    var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
-    for (var wi = 0; wi < weekKeys.length; wi++) {
-      var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
-      // Skip first week of the month — month starts from 0
-      var firstWeekOfMonth = getISOWeek(2026, m, 1);
-      if (wkNum === firstWeekOfMonth) continue;
-      if (wkTotal > WEEKLY_LIMIT) {
-        restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
-      }
-    }
-  }
-  // Sort by exceeded amount descending (most overtime gets priority)
-  restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
-
-  // Distribute rest days: assign each person to the next available Mon-Sat (max 1/工段/天)
-  var MAX_REST_PER_DAY = 1;
-  for (var qi = 0; qi < restQueue.length; qi++) {
-    var item = restQueue[qi];
-    if (!forcedRest[item.empId]) forcedRest[item.empId] = [];
-    var section = getSection(item.empId) || '未分组';
-    if (!dayRestCount[section]) dayRestCount[section] = {};
-
-    // Find all eligible Mon-Sat days in next ISO week
-    var candidates = [];
-    for (var dd = 1; dd <= maxDay; dd++) {
-      if (getISOWeek(2026, m, dd) === item.week + 1) {
-        var dateCheck = new Date(2026, m-1, dd);
-        var dowCheck = dateCheck.getDay();
-        if (dowCheck !== 0) { // Mon-Sat only
-          candidates.push(dd);
-        }
-      }
-      if (getISOWeek(2026, m, dd) > item.week + 1) break;
-    }
-
-    // Pick the first candidate day with < MAX_REST_PER_DAY rest for this section
-    var assigned = false;
-    for (var ci = 0; ci < candidates.length; ci++) {
-      var cd = candidates[ci];
-      var count = dayRestCount[section][cd] || 0;
-      if (count < MAX_REST_PER_DAY) {
-        dayRestCount[section][cd] = count + 1;
-        forcedRest[item.empId].push({ week: item.week, restDay: cd, exceeded: item.exceeded });
-        assigned = true;
-        break;
-      }
-    }
-    // If all candidates are full, pick the one with the least count
-    if (!assigned && candidates.length > 0) {
-      var bestDay = candidates[0], bestCount = dayRestCount[section][candidates[0]] || 0;
-      for (var ci = 1; ci < candidates.length; ci++) {
-        var cc = dayRestCount[section][candidates[ci]] || 0;
-        if (cc < bestCount) { bestCount = cc; bestDay = candidates[ci]; }
-      }
-      if (!dayRestCount[section][bestDay]) dayRestCount[section][bestDay] = 0;
-      dayRestCount[section][bestDay] += 1;
-      forcedRest[item.empId].push({ week: item.week, restDay: bestDay, exceeded: item.exceeded });
-    }
-  }
-
-  // ===== OT-based rest: 前一天加班超 OT_REST_THRESHOLD h → 下早班（周六→周一）=====
-  var today = getTodayInMonth(month);
-  if (today && today >= 2) {
-    // Monday: check Saturday (skip Sunday)
-    var yesterdayDay = (new Date(2026, m-1, today).getDay() === 1) ? today - 2 : today - 1;
-    if (yesterdayDay >= 1) {
-    for (var ei = 0; ei < data.length; ei++) {
-      var empId = data[ei].emp_id;
-      if (assignedEmpIds[empId]) continue; // already has saved rest
-      var ddaily = data[ei].daily || [];
-      var yesterdayRec = ddaily.find(function(d){ return d.day === yesterdayDay; });
-      if (!yesterdayRec) continue;
-      var yesterdayOT = (yesterdayRec._lianban || 0) + (yesterdayRec._ot || 0);
-      if (yesterdayOT <= OT_REST_THRESHOLD) continue;
-
-      var restDay = today;
-      var restDOW = new Date(2026, m-1, restDay).getDay();
-      if (restDOW === 0) restDay = today + 1; // Sunday -> Monday
-
-      var alreadyHas = forcedRest[empId] && forcedRest[empId].some(function(r){ return r.restDay === restDay; });
-      if (alreadyHas) continue;
-
-      var sec = getSection(empId);
+  if (hasSaved) {
+    // === Locked mode: use saved data, no recalculation ===
+    for (var savedEid in savedRest) {
+      var sr = savedRest[savedEid];
+      var sec = getSection(savedEid) || '未分组';
+      if (!forcedRest[savedEid]) forcedRest[savedEid] = [];
+      forcedRest[savedEid].push({ week: sr.week || 0, restDay: sr.restDay, restType: sr.restType || 'week' });
       if (!dayRestCount[sec]) dayRestCount[sec] = {};
-      // Find next available day in current week (Mon-Sat, exclude Sunday)
-      if ((dayRestCount[sec][restDay] || 0) >= 1) {
-        var foundDay = null;
-        for (var tryDay = today; tryDay <= today + 6; tryDay++) {
-          if (tryDay > maxDay) break;
-          var tryDOW = new Date(2026, m-1, tryDay).getDay();
-          if (tryDOW === 0) continue; // skip Sunday
-          if ((dayRestCount[sec][tryDay] || 0) < 1) { foundDay = tryDay; break; }
-        }
-        if (foundDay === null) continue;
-        restDay = foundDay;
+      dayRestCount[sec][sr.restDay] = (dayRestCount[sec][sr.restDay] || 0) + 1;
+    }
+  } else {
+    // === Fresh computation: calculate from scratch ===
+    // Week-based rest
+    var restQueue = [];
+    for (var ri = 0; ri < data.length; ri++) {
+      var rec = data[ri];
+      var weekHours = {};
+      var daily = rec.daily || [];
+      for (var di = 0; di < daily.length; di++) {
+        var d = daily[di];
+        var w = getISOWeek(2026, m, d.day);
+        if (!weekHours[w]) weekHours[w] = 0;
+        weekHours[w] += (d._normal !== undefined ? d._normal : 0) + (d._lianban !== undefined ? d._lianban : 0) + (d._ot !== undefined ? d._ot : 0);
       }
+      var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
+      for (var wi = 0; wi < weekKeys.length; wi++) {
+        var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
+        var firstWeekOfMonth = getISOWeek(2026, m, 1);
+        if (wkNum === firstWeekOfMonth) continue;
+        if (wkTotal > WEEKLY_LIMIT) {
+          restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
+        }
+      }
+    }
+    restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
 
-      dayRestCount[sec][restDay] = (dayRestCount[sec][restDay] || 0) + 1;
-      if (!forcedRest[empId]) forcedRest[empId] = [];
-      forcedRest[empId].push({ week: getISOWeek(2026, m, yesterdayDay), restDay: restDay, restType: 'ot' });
+    for (var qi = 0; qi < restQueue.length; qi++) {
+      var item = restQueue[qi];
+      if (!forcedRest[item.empId]) forcedRest[item.empId] = [];
+      var secW = getSection(item.empId) || '未分组';
+      if (!dayRestCount[secW]) dayRestCount[secW] = {};
+      var candidates = [];
+      for (var dd = 1; dd <= maxDay; dd++) {
+        if (getISOWeek(2026, m, dd) === item.week + 1) {
+          var dateCheck = new Date(2026, m-1, dd);
+          if (dateCheck.getDay() !== 0) candidates.push(dd);
+        }
+        if (getISOWeek(2026, m, dd) > item.week + 1) break;
+      }
+      var assignedW = false;
+      for (var ci = 0; ci < candidates.length; ci++) {
+        var cd = candidates[ci];
+        if ((dayRestCount[secW][cd] || 0) < 1) {
+          dayRestCount[secW][cd] = (dayRestCount[secW][cd] || 0) + 1;
+          forcedRest[item.empId].push({ week: item.week, restDay: cd, exceeded: item.exceeded });
+          assignedW = true;
+          break;
+        }
+      }
+      if (!assignedW && candidates.length > 0) {
+        var bestDay = candidates[0], bestCount = dayRestCount[secW][candidates[0]] || 0;
+        for (var ci = 1; ci < candidates.length; ci++) {
+          var cc = dayRestCount[secW][candidates[ci]] || 0;
+          if (cc < bestCount) { bestCount = cc; bestDay = candidates[ci]; }
+        }
+        dayRestCount[secW][bestDay] = (dayRestCount[secW][bestDay] || 0) + 1;
+        forcedRest[item.empId].push({ week: item.week, restDay: bestDay, exceeded: item.exceeded });
+      }
     }
+
+    // OT-based rest
+    var todayD = getTodayInMonth(month);
+    if (todayD && todayD >= 2) {
+      var yesterdayDay = (new Date(2026, m-1, todayD).getDay() === 1) ? todayD - 2 : todayD - 1;
+      if (yesterdayDay >= 1) {
+        for (var ei = 0; ei < data.length; ei++) {
+          var empId = data[ei].emp_id;
+          var ddaily = data[ei].daily || [];
+          var yesterdayRec = ddaily.find(function(d){ return d.day === yesterdayDay; });
+          if (!yesterdayRec) continue;
+          var yOT = (yesterdayRec._lianban || 0) + (yesterdayRec._ot || 0);
+          if (yOT <= OT_REST_THRESHOLD) continue;
+          var restDayOT = todayD;
+          var restDOW_OT = new Date(2026, m-1, restDayOT).getDay();
+          if (restDOW_OT === 0) restDayOT = todayD + 1;
+          var alreadyHasOT = forcedRest[empId] && forcedRest[empId].some(function(r){ return r.restDay === restDayOT; });
+          if (alreadyHasOT) continue;
+          var secOT = getSection(empId) || '未分组';
+          if (!dayRestCount[secOT]) dayRestCount[secOT] = {};
+          if ((dayRestCount[secOT][restDayOT] || 0) >= 1) {
+            var foundDayOT = null;
+            for (var tryD = todayD; tryD <= todayD + 6; tryD++) {
+              if (tryD > maxDay) break;
+              if (new Date(2026, m-1, tryD).getDay() === 0) continue;
+              if ((dayRestCount[secOT][tryD] || 0) < 1) { foundDayOT = tryD; break; }
+            }
+            if (foundDayOT === null) continue;
+            restDayOT = foundDayOT;
+          }
+          dayRestCount[secOT][restDayOT] = (dayRestCount[secOT][restDayOT] || 0) + 1;
+          if (!forcedRest[empId]) forcedRest[empId] = [];
+          forcedRest[empId].push({ week: getISOWeek(2026, m, yesterdayDay), restDay: restDayOT, restType: 'ot' });
+        }
+      }
     }
+
+    // Save immediately to lock it
+    var toSave = {};
+    for (var eid in forcedRest) {
+      var frs = forcedRest[eid];
+      if (frs.length > 0) {
+        var fr = frs[0];
+        toSave[eid] = { restDay: fr.restDay, restType: fr.restType || 'week', week: fr.week || 0 };
+      }
+    }
+    API.post('/api/rest-schedule', { month: month, assignments: toSave }).catch(function(){});
   }
 
   // ===== Group rest summary by REST week + 工段 =====
@@ -1936,17 +1923,6 @@ async function renderScheduleAsync() {
   }
 
   document.getElementById('scheduleContent').innerHTML = html;
-
-  // Save all current rest assignments (full replace)
-  var toSave = {};
-  for (var eid in forcedRest) {
-    var frs = forcedRest[eid];
-    if (frs.length > 0) {
-      var fr = frs[0];
-      toSave[eid] = { restDay: fr.restDay, restType: fr.restType || 'week', week: fr.week || 0 };
-    }
-  }
-  API.post('/api/rest-schedule', { month: month, assignments: toSave }).catch(function(){});
 }
 
 </script>
