@@ -1811,7 +1811,17 @@ async function renderScheduleAsync() {
       }
     }
   }
-  restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
+  restQueue.sort(function(a,b){
+    // Count existing rest days (locked + already in queue)
+    var cntA = (assignedEmpIds[a.empId] ? 1 : 0);
+    var cntB = (assignedEmpIds[b.empId] ? 1 : 0);
+    // Also count already-scheduled rest in forcedRest
+    if (forcedRest[a.empId]) cntA += forcedRest[a.empId].length;
+    if (forcedRest[b.empId]) cntB += forcedRest[b.empId].length;
+    // Priority: fewer rest days first; tie-break by exceeded hours
+    if (cntA !== cntB) return cntA - cntB;
+    return b.exceeded - a.exceeded;
+  });
 
     for (var qi = 0; qi < restQueue.length; qi++) {
       var item = restQueue[qi];
