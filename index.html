@@ -1801,15 +1801,17 @@ async function renderScheduleAsync() {
     var rec = data[ri];
     if (assignedEmpIds[rec.emp_id]) continue;
     var weekHours = empWeekHours[rec.emp_id];
-        var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
-        var firstWeekOfMonth = getISOWeek(2026, m, 1);
-        if (wkNum === firstWeekOfMonth) continue;
-        if (wkTotal > WEEKLY_LIMIT) {
-          restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
-        }
+    var weekKeys = Object.keys(weekHours).map(Number).sort(function(a,b){return a-b;});
+    for (var wi = 0; wi < weekKeys.length; wi++) {
+      var wkNum = weekKeys[wi], wkTotal = weekHours[wkNum];
+      var firstWeekOfMonth = getISOWeek(2026, m, 1);
+      if (wkNum === firstWeekOfMonth) continue;
+      if (wkTotal > WEEKLY_LIMIT) {
+        restQueue.push({ empId: rec.emp_id, week: wkNum, exceeded: wkTotal });
       }
     }
-    restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
+  }
+  restQueue.sort(function(a,b){ return b.exceeded - a.exceeded; });
 
     for (var qi = 0; qi < restQueue.length; qi++) {
       var item = restQueue[qi];
