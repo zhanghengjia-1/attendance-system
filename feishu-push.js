@@ -170,15 +170,26 @@ async function main() {
     elements: elements
   };
 
-  const res = await fetch(WEBHOOK_URL, {
-    method: 'POST', headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ msg_type: 'interactive', card: card })
-  });
-  const result = await res.json();
-  if (result.StatusCode === 0 || result.code === 0) {
-    console.log('✅ 推送成功');
-  } else {
+  // 推送（带重试，遇到频率限制等待后重试）
+  const maxRetries = 3;
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    const res = await fetch(WEBHOOK_URL, {
+      method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ msg_type: 'interactive', card: card })
+    });
+    const result = await res.json();
+    if (result.StatusCode === 0 || result.code === 0) {
+      console.log('✅ 推送成功');
+      return;
+    }
+    // 频率限制 (code 11232) 等待后重试
+    if (result.code === 11232 && attempt < maxRetries) {
+      console.warn(`⚠️ 频率限制，第${attempt}次重试等待${attempt * 10}秒...`);
+      await new Promise(r => setTimeout(r, attempt * 10000));
+      continue;
+    }
     console.error('❌ 推送失败:', JSON.stringify(result));
+    return;
   }
 }
 
