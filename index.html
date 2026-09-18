@@ -208,7 +208,7 @@
           <button class="btn btn-main" type="button">进入系统</button>
           <button class="btn btn-ghost" type="button" onclick="event.stopPropagation(); openBlank('warehouse')">新窗口</button>
         </div>
-        <div class="hint">飞书应用 · 若内嵌被拦截请用新窗口打开</div>
+        <div class="hint">飞书应用不支持内嵌，点击后将在新窗口打开</div>
       </article>
     </section>
   </main>
@@ -236,7 +236,8 @@
     },
     warehouse: {
       name: '仓库系统',
-      url: 'https://cvte-seewo.feishuapp.com/app/app_4k5zrnu327jz5'
+      url: 'https://cvte-seewo.feishuapp.com/app/app_4k5zrnu327jz5',
+      external: true
     }
   };
   var currentKey = null;
@@ -260,17 +261,38 @@
     currentKey = key;
     var app = APPS[key];
     document.getElementById('appTitle').textContent = app.name;
+    if (app.external) {
+      openBlank(key);
+      document.getElementById('appFrame').src = 'about:blank';
+      document.getElementById('appView').classList.add('show');
+      document.getElementById('appFrame').srcdoc =
+        '<!DOCTYPE html><html lang="zh-CN"><head><meta charset="UTF-8"><style>' +
+        'body{margin:0;min-height:100vh;display:flex;align-items:center;justify-content:center;' +
+        'font-family:-apple-system,BlinkMacSystemFont,PingFang SC,Microsoft YaHei,sans-serif;' +
+        'background:#f4f6fb;color:#2c3e50;}' +
+        '.box{text-align:center;padding:32px;}' +
+        'h2{margin:0 0 10px;font-size:22px;}' +
+        'p{margin:0 0 18px;color:#6b7785;line-height:1.6;}' +
+        'a{display:inline-block;padding:10px 18px;border-radius:10px;background:#1a73e8;color:#fff;text-decoration:none;font-weight:600;}' +
+        '</style></head><body><div class="box"><h2>仓库系统已在新窗口打开</h2>' +
+        '<p>飞书应用不允许内嵌到本工作台，请在新窗口中扫码或登录后使用。<br>若没有弹出窗口，请点击下方按钮。</p>' +
+        '<a href="' + app.url + '" target="_blank" rel="noopener">再次打开仓库系统</a></div></body></html>';
+      return;
+    }
+    document.getElementById('appFrame').removeAttribute('srcdoc');
     document.getElementById('appFrame').src = app.url;
     document.getElementById('appView').classList.add('show');
   }
   function closeApp() {
     document.getElementById('appView').classList.remove('show');
-    document.getElementById('appFrame').src = 'about:blank';
+    var frame = document.getElementById('appFrame');
+    frame.removeAttribute('srcdoc');
+    frame.src = 'about:blank';
     currentKey = null;
   }
   function reloadApp() {
     if (!currentKey) return;
-    document.getElementById('appFrame').src = APPS[currentKey].url;
+    openApp(currentKey);
   }
   function openBlank(key) {
     window.open(APPS[key].url, '_blank', 'noopener');
