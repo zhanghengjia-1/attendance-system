@@ -9,6 +9,10 @@ const PORT = process.env.PORT || 3000;
 app.use(express.json({ limit: '50mb' }));
 app.use(express.static(__dirname));
 
+app.get('/attendance', (req, res) => {
+  res.sendFile(path.join(__dirname, 'attendance.html'));
+});
+
 const BASE_DATA_FILE = path.join(__dirname, 'data.js');
 
 // Load base attendance data (static, from data.js)

@@ -1,7 +1,7 @@
 {
   "name": "attendance-system",
   "version": "1.0.0",
-  "description": "设备组考勤管理系统",
+  "description": "设备工作台（按灯 / 考勤 / 仓库）",
   "main": "server.js",
   "scripts": {
     "start": "node server.js"
